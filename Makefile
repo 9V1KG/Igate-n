@@ -4,7 +4,7 @@ PYTHON=~/${VENV_NAME}/bin/python3
 PIP = pip3
 PYCOV = $(PYTHON) -m coverage
 PYTEST = tests
-SRC = .
+SRC = IGaten
 
 .DEFAULT_GOAL := fullcheck
 fullcheck:
@@ -20,7 +20,8 @@ coverage:
 	$(PYCOV) erase
 	$(RM)  coverage.txt
 	-$(PYCOV) run -a -m pytest
-	$(PYCOV) report --source=$(SRC) -m > ./coverage.txt
+	$(PYCOV) report  --include=$(SRC)/* > ./coverage.txt
+	cat ./coverage.txt
 
 .PHONY: doc
 doc:
