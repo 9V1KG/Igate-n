@@ -1,6 +1,6 @@
 Ygate-n Yaesu IGate new
 
-This script is based on the original work from Craig Lamparter 
+This script is based on the idea from Craig Lamparter 
 https://github.com/hessu/ygate
 This version is a heavily modified and improved version by 
 (c) 9V1KG
