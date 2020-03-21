@@ -27,6 +27,10 @@ coverage:
 doc:
 	$(VENV_ACTIVATE) && cd Doc; make html
 
+.PHONY: docserve
+docserve: doc
+	$(VENV_ACTIVATE) && cd Doc/build/html; echo "Press Ctrl C to stop " && $(PYTHON) -m http.server  
+
 format:
 	$(PYTHON) -m black $(SRC)
 	$(PYTHON) -m black $(PYTEST)

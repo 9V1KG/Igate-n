@@ -10,5 +10,15 @@ setup(
     author="9V1KG",
     author_email="",
     install_requires=requirements,
+    extras_require={
+        'dev': [
+            'pytest',
+            'pytest-pep8',
+            'pytest-cov',
+            'sphinx',
+            'recommonmark',
+            'black',
+            'pylint'
+        ]},
     description="APRS for Yaesu Radio",
 )

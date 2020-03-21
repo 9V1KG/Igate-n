@@ -1,15 +1,17 @@
-# Ygate-n Yaesu igate
-# This script is based on the idea from Craig Lamparter
-# https://github.com/hessu/ygate
-#
-# 9V1KG
-# Version 2020-03-20
-#
-# DU3/M0FGC
-# Slight mods
+"""
+Ygate-n Yaesu igate
+This script is based on the idea from Craig Lamparter
+https://github.com/hessu/ygate
 
 
-import os
+##Modification history
+
+  - 9V1KG
+    - Version 2020-03-20.
+    - Author
+  -  DU3/M0FGC
+     - Slight mods/frills
+"""
 import socket
 import threading
 import time
@@ -33,6 +35,9 @@ class Color:
 
 
 class Ygate:
+    """
+    Yaesu APRS Gate.
+    """
 
     HOURLY = 3600.0
 
@@ -49,7 +54,7 @@ class Ygate:
         SERIAL="/dev/ttyUSB0",
     ):
         """
-        Class initializer
+        Class initializer.
 
         :param HOST:
         :param PORT:
@@ -82,7 +87,7 @@ class Ygate:
 
     def format_position(self, lon: tuple, lat: tuple) -> str:
         """
-         # Formatted APRS Position String
+        Formatted APRS Position String
         :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
         :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
         :return: Aprs formatted string
@@ -97,10 +102,10 @@ class Ygate:
         self, url: str = "http://www.google.com/", timeout: int = 20
     ) -> bool:
         """
-        Is there an internet connection
+        Is there an internet connection  ?
         :param url: String pointing to a URL
         :param timeout: How long we wait in seconds
-        :return:
+        :return:  True or False
         """
         try:
             req = requests.get(url, timeout=timeout)
@@ -206,7 +211,11 @@ class Ygate:
             return False
         return True
 
-    def open_serial(self):
+    def open_serial(self) -> serial.Serial:
+        """
+        Open the Serial Port.
+        :return: Serial port object
+        """
         try:
             # open first usb serial port
             self.ser = serial.Serial(self.SERIAL, 9600)
@@ -217,7 +226,19 @@ class Ygate:
             print(Color.RED + f"Error {str(err)}")
             exit(0)
 
-    def start(self):
+    def start(self) -> None:
+        """
+        This is the method that does all the work.
+        It should be called like this
+
+
+        ```python
+        from IGaten import Ygate
+        yg=YGate()  # Default params ! - You probably need to change these
+        yg.start()
+        ```
+        :return:
+        """
         signal.signal(signal.SIGINT, self.signal_handler)
 
         loc_time = time.strftime("%H:%M:%S")
