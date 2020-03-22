@@ -1,17 +1,15 @@
-"""
-Ygate-n Yaesu igate
-This script is based on the idea from Craig Lamparter
-https://github.com/hessu/ygate
+# Ygate-n Yaesu igate
+# This script is based on the idea from Craig Lamparter
+# https://github.com/hessu/ygate
+#
+# 9V1KG
+# Version 2020-03-20
+#
+# DU3/M0FGC
+# Slight mods
 
 
-##Modification history
-
-  - 9V1KG
-    - Version 2020-03-20.
-    - Author
-  -  DU3/M0FGC
-     - Slight mods/frills
-"""
+import os
 import socket
 import threading
 import time
@@ -35,9 +33,6 @@ class Color:
 
 
 class Ygate:
-    """
-    Yaesu APRS Gate.
-    """
 
     HOURLY = 3600.0
 
@@ -54,7 +49,7 @@ class Ygate:
         SERIAL="/dev/ttyUSB0",
     ):
         """
-        Class initializer.
+        Class initializer
 
         :param HOST:
         :param PORT:
@@ -77,17 +72,19 @@ class Ygate:
         self.USER = USER
         self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
         self.ser = None
-        self.sck = None
+        self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
+        self.pos = self.format_position(self.LON, self.LAT)
+        print(f"         Position: {self.pos}")
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
         print("\r\nCtrl+C, exiting.")
         self.ser.close()
-        exit(0)
+        os._exit(0)
 
     def format_position(self, lon: tuple, lat: tuple) -> str:
         """
-        Formatted APRS Position String
+         # Formatted APRS Position String
         :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
         :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
         :return: Aprs formatted string
@@ -102,10 +99,10 @@ class Ygate:
         self, url: str = "http://www.google.com/", timeout: int = 20
     ) -> bool:
         """
-        Is there an internet connection  ?
+        Is there an internet connection
         :param url: String pointing to a URL
         :param timeout: How long we wait in seconds
-        :return:  True or False
+        :return:
         """
         try:
             req = requests.get(url, timeout=timeout)
@@ -183,39 +180,39 @@ class Ygate:
         thread that sends position every BEACON sec to APRS IS
         :return: Boolean indicating Success or failure
         """
+        position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
         try:
-
-            position = self.format_position(
-                self.LON, self.LAT
-            )  # get APRS position string
-            print(f"         Position: {position}")
             threading.Timer(self.BEACON, self.send_my_position).start()
-            position_string = f"{self.USER}>APRS,TCPIP*:={position}#{self.BCNTXT}\n"
             self.send_aprs(position_string)
-        except Exception as err:
-            print(f"Something went wrong {str(err)}")
-            return False
+        except BrokenPipeError as err:
+            if self.aprs_con():
+                self.send_aprs(position_string)
+            else:
+                l_t = time.strftime("%H:%M:%S")
+                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
+                return False
         return True
+
 
     def send_bulletin(self) -> bool:
         """
         Bulletin
         :return:
         """
+        bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
         try:
             threading.Timer(Ygate.HOURLY, self.send_bulletin).start()
-            bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
             self.send_aprs(bulletin)
-        except Exception as err:
-            print(f"Something went wrong {str(err)}")
-            return False
+        except BrokenPipeError as err:
+            if self.aprs_con():
+                self.send_aprs(bulletin)
+            else:
+                l_t = time.strftime("%H:%M:%S")
+                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
+                return False
         return True
 
-    def open_serial(self) -> serial.Serial:
-        """
-        Open the Serial Port.
-        :return: Serial port object
-        """
+    def open_serial(self):
         try:
             # open first usb serial port
             self.ser = serial.Serial(self.SERIAL, 9600)
@@ -223,22 +220,10 @@ class Ygate:
         except Exception as err:
             print(Color.RED + "Serial interface cannot be initialized" + Color.END)
             print(Color.RED + "Check connection and driver name" + Color.END)
-            print(Color.RED + f"Error {str(err)}")
+            # print(Color.RED + f"Error {str(err)}")
             exit(0)
 
-    def start(self) -> None:
-        """
-        This is the method that does all the work.
-        It should be called like this
-
-
-        ```python
-        from IGaten import Ygate
-        yg=YGate()  # Default params ! - You probably need to change these
-        yg.start()
-        ```
-        :return:
-        """
+    def start(self):
         signal.signal(signal.SIGINT, self.signal_handler)
 
         loc_time = time.strftime("%H:%M:%S")
@@ -320,3 +305,16 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
+
+gate = Ygate(
+        "rotate.aprs2.net",
+        14580,
+        "DU1KG-10",
+        "16892",
+        (14, 7.09, "N"),
+        (120, 58.07, "E"),
+        "IGate RF-IS 144.10 - 73 Klaus",
+        900,
+        "/dev/ttyUSB0",
+)
+gate.start()
