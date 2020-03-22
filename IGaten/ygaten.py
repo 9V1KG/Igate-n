@@ -305,16 +305,3 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
-
-gate = Ygate(
-        "rotate.aprs2.net",
-        14580,
-        "DU1KG-10",
-        "16892",
-        (14, 7.09, "N"),
-        (120, 58.07, "E"),
-        "IGate RF-IS 144.10 - 73 Klaus",
-        900,
-        "/dev/ttyUSB0",
-)
-gate.start()
