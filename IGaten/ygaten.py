@@ -314,17 +314,17 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
-
+"""
 igate = Ygate(
     "rotate.aprs2.net",
     14580,
-    "DU1KG-10",
-    "16892",
-    (14, 7.09, "N"),
-    (120, 58.07, "E"),
-    "IGate RF-IS 144.10 - 73 Klaus",
+    "MYCALL-10",
+    "00000",
+    (14, 7.00, "N"),
+    (120, 58.00, "E"),
+    "IGate RF-IS 144.10 - 73",
     900.0,
-    "/dev/tty.usbserial-14110"
+    "/dev/ttyUSB0"
 )
 igate.start()
-
+"""
