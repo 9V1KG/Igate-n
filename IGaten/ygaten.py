@@ -71,8 +71,8 @@ class Ygate:
         self.PASS = PASS
         self.USER = USER
         self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
-        self.ser = None
         self.pos = self.format_position(self.LON, self.LAT)
+        self.ser = None
         self.sck = None
 
     # Define signal handler for ^C (exit program)
@@ -95,7 +95,7 @@ class Ygate:
         return pos
 
     def is_internet(
-        self, url: str = "http://www.google.com/", timeout: int = 20
+        self, url: str = "http://www.google.com/", timeout: int = 30
     ) -> bool:
         """
         Is there an internet connection
@@ -198,8 +198,21 @@ class Ygate:
             else:
                 l_t = time.strftime("%H:%M:%S")
                 print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
-                # return False
-        # return True
+
+    def send_bulletin(self):
+        """
+        thread that sends bulletin every HOURLY sec to APRS IS
+        """
+        bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
+        threading.Timer(self.HOURLY, self.send_bulletin).start()
+        try:
+            self.send_aprs(bulletin)
+        except BrokenPipeError as err:
+            if self.aprs_con():
+                self.send_aprs(bulletin)
+            else:
+                l_t = time.strftime("%H:%M:%S")
+                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
 
     def open_serial(self):
         try:
@@ -228,6 +241,7 @@ class Ygate:
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con():
                 self.send_my_position()
+                self.send_bulletin()
             else:
                 print(
                     f"{loc_time} {Color.YELLOW}No connection to APRS server{Color.END}"
