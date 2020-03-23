@@ -1,6 +1,6 @@
 from setuptools import setup
 
-requirements = "serial", "requests", "black", "pylint"
+requirements = "pyserial", "requests", "black", "pylint"
 setup(
     name="Igate-n",
     version="0.0a",
