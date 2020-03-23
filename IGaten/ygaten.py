@@ -73,6 +73,7 @@ class Ygate:
         self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
         self.ser = None
         self.pos = self.format_position(self.LON, self.LAT)
+        self.sck = None
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -206,8 +207,8 @@ class Ygate:
             self.ser = serial.Serial(self.SERIAL, 9600)
             return self.ser
         except Exception as err:
-            print(Color.RED + "Serial interface cannot be initialized" + Color.END)
-            print(Color.RED + "Check connection and driver name" + Color.END)
+            print(" " * 9 + f"{Color.RED}Serial interface cannot be initialized{Color.END}")
+            print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
             # print(Color.RED + f"Error {str(err)}")
             exit(0)
 
@@ -219,7 +220,7 @@ class Ygate:
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
-        print(f"         Position: {self.pos}")
+        print(" "* 9 + f"Position: {self.pos}")
 
         ser = self.open_serial()
         self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
@@ -299,3 +300,17 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
+
+igate = Ygate(
+    "rotate.aprs2.net",
+    14580,
+    "DU1KG-10",
+    "16892",
+    (14, 7.09, "N"),
+    (120, 58.07, "E"),
+    "IGate RF-IS 144.10 - 73 Klaus",
+    900.0,
+    "/dev/tty.usbserial-14110"
+)
+igate.start()
+
