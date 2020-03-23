@@ -73,7 +73,6 @@ class Ygate:
         self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
         self.ser = None
         self.pos = self.format_position(self.LON, self.LAT)
-        print(f"         Position: {self.pos}")
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -143,10 +142,18 @@ class Ygate:
         self.sck.sendall(
             bytes(f"user {self.USER} pass {self.PASS} vers ygate-n 0.5\n", "ascii")
         )
-        print(f"{l_time}  {Color.GREEN}{sock_file.readline().strip()}{Color.END}")
-        print(f"{l_time}  {Color.GREEN}{sock_file.readline().strip()}{Color.END}")
-        # todo Check whether login successful
-        return True
+        print(
+            f"{l_time}  {Color.GREEN}{sock_file.readline().strip()}{Color.END}"
+        )
+        # if second line contains "unverified", login was not successful
+        login = sock_file.readline().strip()
+        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
+        if login.find("unverified") != -1:
+            print(
+                f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}")
+            exit(0)
+        else:
+            return True
 
     # todo Add Logging
     def send_aprs(self, aprs_string: str) -> bool:
@@ -179,7 +186,6 @@ class Ygate:
     def send_my_position(self):
         """
         thread that sends position every BEACON sec to APRS IS
-        :return: Boolean indicating Success or failure
         """
         position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
         threading.Timer(self.BEACON, self.send_my_position).start()
@@ -213,6 +219,7 @@ class Ygate:
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
+        print(f"         Position: {self.pos}")
 
         ser = self.open_serial()
         self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
@@ -265,17 +272,23 @@ class Ygate:
                 else:
                     message = f"{packet}"[2:-5]  # no b' and \r\n
                     try:
-                        self.sck.sendall(
-                            packet
-                        )  # spec calls for cr/lf, just lf worked in practice too
-                        print(f"{localtime} {message}")
-                        message = ""
+                        if self.is_internet():
+                            self.sck.sendall(
+                                packet
+                            )  # spec calls for cr/lf, just lf worked in practice too
+                            print(f"{localtime} {message}")
+                            message = ""
+                        else:
+                            message = "No Internet, packet not gated"
+
                     except TimeoutError or BrokenPipeError or OSError:
-                        sck = socket.socket(
+                        self.sck = socket.socket(
                             socket.AF_INET, socket.SOCK_STREAM
                         )  # open socket
                         if self.aprs_con():  # try to reconnect
-                            sck.sendall(bytes(packet))
+                            self.sck.sendall(
+                                packet
+                            )
                             print(f"{localtime} {message}")
                             message = ""
                         else:
