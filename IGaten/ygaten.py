@@ -45,7 +45,7 @@ class Ygate:
         LAT=(14, 8.09, "N"),
         LON=(119, 55.07, "E"),
         BCNTXT="IGate RF-IS 144.39 - 73",
-        BEACON=900,
+        BEACON=900.0,
         SERIAL="/dev/ttyUSB0",
     ):
         """
@@ -72,7 +72,6 @@ class Ygate:
         self.USER = USER
         self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
         self.ser = None
-        self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
         self.pos = self.format_position(self.LON, self.LAT)
         print(f"         Position: {self.pos}")
 
@@ -146,6 +145,7 @@ class Ygate:
         )
         print(f"{l_time}  {Color.GREEN}{sock_file.readline().strip()}{Color.END}")
         print(f"{l_time}  {Color.GREEN}{sock_file.readline().strip()}{Color.END}")
+        # todo Check whether login successful
         return True
 
     # todo Add Logging
@@ -162,27 +162,28 @@ class Ygate:
             return True
         except TimeoutError or BrokenPipeError or OSError as msg:
             print(
-                f"{l_time} {Color.YELLOW}Connection to APRS server lost, nothing sent{Color.END} {msg}"
+                f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
             )
             time.sleep(2)
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.aprs_con():
                 self.sck.sendall(bytes(aprs_string, "ascii"))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                return True
             else:
                 print(
                     f"{l_time} {Color.YELLOW}No internet, not sent: {aprs_string.strip()}{Color.END}"
                 )
-            return False
+                return False
 
-    def send_my_position(self) -> bool:
+    def send_my_position(self):
         """
         thread that sends position every BEACON sec to APRS IS
         :return: Boolean indicating Success or failure
         """
         position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
+        threading.Timer(self.BEACON, self.send_my_position).start()
         try:
-            threading.Timer(self.BEACON, self.send_my_position).start()
             self.send_aprs(position_string)
         except BrokenPipeError as err:
             if self.aprs_con():
@@ -190,27 +191,8 @@ class Ygate:
             else:
                 l_t = time.strftime("%H:%M:%S")
                 print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
-                return False
-        return True
-
-
-    def send_bulletin(self) -> bool:
-        """
-        Bulletin
-        :return:
-        """
-        bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
-        try:
-            threading.Timer(Ygate.HOURLY, self.send_bulletin).start()
-            self.send_aprs(bulletin)
-        except BrokenPipeError as err:
-            if self.aprs_con():
-                self.send_aprs(bulletin)
-            else:
-                l_t = time.strftime("%H:%M:%S")
-                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
-                return False
-        return True
+                # return False
+        # return True
 
     def open_serial(self):
         try:
@@ -233,12 +215,11 @@ class Ygate:
         )
 
         ser = self.open_serial()
-        sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
+        self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
         if self.is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con():
                 self.send_my_position()
-                # send_bulletin() optional
             else:
                 print(
                     f"{loc_time} {Color.YELLOW}No connection to APRS server{Color.END}"
