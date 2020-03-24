@@ -38,4 +38,6 @@ for Linux (Raspberry) "/dev/ttyUSB0". For a windows PC it will be "COM1:"
 Start the program in the command line window with python3 Ygate-n.py
 Stop the program with ctrl c
 
+# Install and Run (Update)
 
+Please see the document [Install And Run](Install_run.md) for more information.
