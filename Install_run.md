@@ -54,7 +54,7 @@ We need to activate the python Env (the one we just created), if you create a ne
 As IGatem is now installed... 
 Lets run it.... We can run it directly as it is a Module...
 
-	python -m  IGaten.YGate 
+	python -m  IGaten
 
 
 *Note this actually runs the __main__.py in the Module.... as we are invoking via a module*
