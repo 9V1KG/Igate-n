@@ -10,7 +10,7 @@ New
 If would make a good base for a Docker image.
 
 
-#Installing 
+# Installing 
 
 These are the steps to install this project.
 
