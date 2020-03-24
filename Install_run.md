@@ -57,7 +57,7 @@ Lets run it.... We can run it directly as it is a Module...
 	python -m  IGaten.YGate 
 
 
-*Note this actually runs the __main__.py in the code.... as we are invoking via a module*
+*Note this actually runs the __main__.py in the Module.... as we are invoking via a module*
 
 
 # Alter how it runs ?
