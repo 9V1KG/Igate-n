@@ -14,8 +14,6 @@ If would make a good base for a Docker image.
 
 These are the steps to install this project.
 
-The Alias on the first line will need to be adjusted depending on your Python3.8 base image.
-
 ```
 #!/bin/bash
 
@@ -52,6 +50,7 @@ We need to activate the python Env (the one we just created), if you create a ne
 As IGaten is now installed... 
 Lets run it.... We can run it directly as it is a Module...
 
+    cd ~/YaesuTest/Igate-n
 	python3 -m  IGaten
 
 
