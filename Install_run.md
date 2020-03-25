@@ -1,7 +1,7 @@
 
 # Install and build from Scratch
 
-This script will build IYagen from scratch.
+This script will build Ygaten from scratch.
 New
   - Python Env
   - Code Base
@@ -18,8 +18,6 @@ The Alias on the first line will need to be adjusted depending on your Python3.8
 
 ```
 #!/bin/bash
-alias py="/usr/local/Cellar/python@3.8/3.8.1/bin/python3"
-
 
 cd 
 #Clean Build Take care this will not ask for permission
@@ -27,7 +25,7 @@ rm -Rf test_install
 mkdir test_install
 cd test_install
 # New Python Virtual Env
-py -m venv ~/test_install/pe38
+python3 -m venv ~/test_install/pe38
 source ~/test_install/pe38/bin/activate
 # Lets check we are using the correct python
 echo $"which python3"
@@ -51,10 +49,10 @@ We need to activate the python Env (the one we just created), if you create a ne
 	source ~/test_install/pe38/bin/activate
 
 
-As IGatem is now installed... 
+As IGaten is now installed... 
 Lets run it.... We can run it directly as it is a Module...
 
-	python -m  IGaten
+	python3 -m  IGaten
 
 
 *Note this actually runs the __main__.py in the Module.... as we are invoking via a module*
