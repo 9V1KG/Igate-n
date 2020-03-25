@@ -3,7 +3,7 @@
 # https://github.com/hessu/ygate
 #
 # 9V1KG
-# Version 2020-03-20
+# Version 2020-03-25
 #
 # DU3/M0FGC
 # Slight mods
@@ -314,17 +314,5 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
-"""
-igate = Ygate(
-    "rotate.aprs2.net",
-    14580,
-    "MYCALL-10",
-    "00000",
-    (14, 7.00, "N"),
-    (120, 58.00, "E"),
-    "IGate RF-IS 144.10 - 73",
-    900.0,
-    "/dev/ttyUSB0"
-)
-igate.start()
-"""
+
+igate = Ygate().start()
