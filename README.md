@@ -53,7 +53,7 @@ Import `pySerial` and `requests` with:
 
 Start the program in the command line window with: 
 
-    python3 -m IGaten
+    python3 ygaten.py
 
 Stop the program with ctrl c.
 
