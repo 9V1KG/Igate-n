@@ -168,11 +168,16 @@ class Ygate:
             self.sck.sendall(bytes(aprs_string, "ascii"))
             print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
             return True
-        except TimeoutError or BrokenPipeError or OSError as msg:
+        except TimeoutError as msg:
+            time.sleep(2.)
+#        except BrokenPipeError as msg:
+#            time.sleep(2.)
+        except OSError as msg:
+            time.sleep(2.)
+        finally:
             print(
                 f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
             )
-            time.sleep(2)
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.aprs_con():
                 self.sck.sendall(bytes(aprs_string, "ascii"))
@@ -222,7 +227,7 @@ class Ygate:
         except Exception as err:
             print(" " * 9 + f"{Color.RED}Serial interface cannot be initialized{Color.END}")
             print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
-            # print(Color.RED + f"Error {str(err)}")
+            print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
 
     def start(self):
@@ -296,7 +301,14 @@ class Ygate:
                         else:
                             message = "No Internet, packet not gated"
 
-                    except TimeoutError or BrokenPipeError or OSError:
+
+                    except TimeoutError as msg:
+                        time.sleep(1.)
+                    # except BrokenPipeError as msg:
+                        # time.sleep(1.)
+                    except OSError as msg:
+                        time.sleep(1.)
+                    finally:
                         self.sck = socket.socket(
                             socket.AF_INET, socket.SOCK_STREAM
                         )  # open socket
