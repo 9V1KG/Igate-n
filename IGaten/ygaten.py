@@ -1,12 +1,15 @@
 # Ygate-n Yaesu igate
-# This script is based on the idea from Craig Lamparter
+# This script is based on an idea from Craig Lamparter
 # https://github.com/hessu/ygate
 #
 # 9V1KG
-# Version 2020-03-25
+# Version 2020-03-20
 #
 # DU3/M0FGC
 # Slight mods
+#
+# 9V1KG
+# Version 2020-03-26
 
 
 import os
@@ -39,7 +42,6 @@ def format_position(lon: tuple, lat: tuple) -> str:
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
     """
-
     lon = "{:03d}".format(lon[0]) + "{:05.2f}".format(lon[1]) + lon[2]
     lat = "{:02d}".format(lat[0]) + "{:05.2f}".format(lat[1]) + lat[2]
     pos = f"{lat}/{lon}"
@@ -107,13 +109,13 @@ class Ygate:
         self.LAT = LAT
         self.PASS = PASS
         self.USER = USER
-        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc - Covid-19: stay home, keep safe!"  # Bulletin
+        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
         self.pos = format_position(self.LON, self.LAT)
         self.ser = None
         self.sck = None
 
     # Define signal handler for ^C (exit program)
-    def signal_handler(self, interupt_signal, frame):
+    def signal_handler(self):
         print("\r\nCtrl+C, exiting.")
         self.ser.close()
         os._exit(0)
@@ -164,7 +166,6 @@ class Ygate:
         :return: Boolean indicating Success or failure
         """
         l_time = time.strftime("%H:%M:%S")
-        err = ''
         try:
             if is_internet():
                 self.sck.sendall(bytes(aprs_string, "ascii"))
@@ -322,7 +323,7 @@ if __name__ == '__main__':
         14580,
         "DU1KG-10",
         "16892",
-        (14, 7.09, "N"),
+        (14,   7.09, "N"),
         (120, 58.07, "E"),
         "IGate RF-IS 144.10 - test phase - 73 Klaus",
         900.0,
