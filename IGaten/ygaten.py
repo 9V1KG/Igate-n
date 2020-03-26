@@ -32,6 +32,43 @@ class Color:
     END = "\033[1;37;0m"
 
 
+def format_position(lon: tuple, lat: tuple) -> str:
+    """
+     # Formatted APRS Position String
+    :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
+    :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
+    :return: Aprs formatted string
+    """
+
+    lon = "{:03d}".format(lon[0]) + "{:05.2f}".format(lon[1]) + lon[2]
+    lat = "{:02d}".format(lat[0]) + "{:05.2f}".format(lat[1]) + lat[2]
+    pos = f"{lat}/{lon}"
+    return pos
+
+
+def is_internet(
+        url: str = "http://www.google.com/", timeout: int = 30
+) -> bool:
+    """
+    Is there an internet connection
+    :param url: String pointing to a URL
+    :param timeout: How long we wait in seconds
+    :return:
+    """
+    try:
+        req = requests.get(url, timeout=timeout)
+        # HTTP errors are not raised by default, this statement does that
+        req.raise_for_status()
+        return True
+    except requests.HTTPError as e:
+        print(
+            f"{Color.RED}Internet connection failed, status code {e.response.status_code}{Color.END}"
+        )
+        return False
+    except requests.ConnectionError:
+        return False
+
+
 class Ygate:
 
     HOURLY = 3600.0
@@ -71,7 +108,7 @@ class Ygate:
         self.PASS = PASS
         self.USER = USER
         self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc - Covid-19: stay home, keep safe!"  # Bulletin
-        self.pos = self.format_position(self.LON, self.LAT)
+        self.pos = format_position(self.LON, self.LAT)
         self.ser = None
         self.sck = None
 
@@ -81,41 +118,7 @@ class Ygate:
         self.ser.close()
         os._exit(0)
 
-    def format_position(self, lon: tuple, lat: tuple) -> str:
-        """
-         # Formatted APRS Position String
-        :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
-        :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
-        :return: Aprs formatted string
-        """
-
-        lon = "{:03d}".format(lon[0]) + "{:05.2f}".format(lon[1]) + lon[2]
-        lat = "{:02d}".format(lat[0]) + "{:05.2f}".format(lat[1]) + lat[2]
-        pos = f"{lat}/{lon}"
-        return pos
-
-    def is_internet(
-        self, url: str = "http://www.google.com/", timeout: int = 30
-    ) -> bool:
-        """
-        Is there an internet connection
-        :param url: String pointing to a URL
-        :param timeout: How long we wait in seconds
-        :return:
-        """
-        try:
-            req = requests.get(url, timeout=timeout)
-            # HTTP errors are not raised by default, this statement does that
-            req.raise_for_status()
-            return True
-        except requests.HTTPError as e:
-            print(
-                f"{Color.RED}Internet connection failed, status code {e.response.status_code}{Color.END}"
-            )
-            return False
-        except requests.ConnectionError:
-            return False
-
+    @property
     def aprs_con(self) -> bool:
         """
         Connect to APRS-IS server
@@ -153,7 +156,6 @@ class Ygate:
         else:
             return True
 
-
     # todo Add Logging
     def send_aprs(self, aprs_string: str) -> bool:
         """
@@ -164,7 +166,7 @@ class Ygate:
         l_time = time.strftime("%H:%M:%S")
         err = ''
         try:
-            if self.is_internet():
+            if is_internet():
                 self.sck.sendall(bytes(aprs_string, "ascii"))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
@@ -207,6 +209,7 @@ class Ygate:
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
+    # todo no return self.ser necessary
     def open_serial(self):
         try:
             # open first usb serial port
@@ -225,9 +228,9 @@ class Ygate:
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
-        print(" "* 9 + f"Position: {self.pos}")
+        print(" " * 9 + f"Position: {self.pos}")
         ser = self.open_serial()
-        if self.is_internet():  # check internet connection
+        if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con:
                 self.send_my_position()
@@ -311,6 +314,7 @@ class Ygate:
                         + f"{packet}"[2:-5]
                         + Color.END
                     )
+
 
 if __name__ == '__main__':
     igate = Ygate(

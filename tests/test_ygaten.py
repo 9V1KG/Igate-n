@@ -24,17 +24,17 @@ class TestYGate(TestCase):
 
     def test_format_position(self):
         self.assertEqual(
-            self.ygate.format_position((14, 8.09, "N"), (119, 55.07, "E")),
+            format_position((14, 8.09, "N"), (119, 55.07, "E")),
             "11955.07E/01408.09N",
         )
 
         self.assertEqual(
-            self.ygate.format_position((14, 8.09, "S"), (119, 55.07, "E")),
+            format_position((14, 8.09, "S"), (119, 55.07, "E")),
             "11955.07E/01408.09S",
         )
 
         self.assertEqual(
-            self.ygate.format_position((14, 8.09, "S"), (119, 55.07, "W")),
+            format_position((14, 8.09, "S"), (119, 55.07, "W")),
             "11955.07W/01408.09S",
         )
 
@@ -42,7 +42,7 @@ class TestYGate(TestCase):
         # Method
         # todo Validate input to format position
         self.assertEqual(
-            self.ygate.format_position((14, 78.09, "S"), (119, 55.07, "W")),
+            format_position((14, 78.09, "S"), (119, 55.07, "W")),
             "11955.07W/01478.09S",
         )
 
@@ -50,7 +50,7 @@ class TestYGate(TestCase):
     def test_is_internet(self, mocked_method):
         # Make sure we call the module only 1 time
         mocked_method.return_value = True
-        self.assertEqual(self.ygate.is_internet("www.google.com", 20), True)
+        self.assertEqual(is_internet("www.google.com", 20), True)
         self.assertEqual(mocked_method.called, True)
         self.assertEqual(mocked_method.call_count, 1)
         self.assertNotEqual(mocked_method.call_count, 2)
@@ -59,7 +59,7 @@ class TestYGate(TestCase):
     def test_is_internet_stupid_site(self, mocked_method):
         mocked_method.return_value = True
         self.assertEqual(
-            self.ygate.is_internet("www.this_site_does_not_exists.com", 20), True
+            is_internet("www.this_site_does_not_exists.com", 20), True
         )
 
     @patch("IGaten.Ygate.aprs_con")
