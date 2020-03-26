@@ -65,7 +65,7 @@ class TestYGate(TestCase):
     @patch("IGaten.Ygate.aprs_con")
     def test_aprs_conn(self, mock_aprs_conn):
         mock_aprs_conn.return_value = True
-        self.assertEqual(self.ygate.aprs_con(), True)
+        self.assertEqual(self.ygate.aprs_con, True)
 
     @patch("IGaten.Ygate.send_aprs")
     def test_send_aprs(self, mock_send_aprs):

@@ -121,11 +121,8 @@ class Ygate:
         Connect to APRS-IS server
         :return: True or False depending on the success.
         """
-
         l_time = time.strftime("%H:%M:%S")
-        try:
-            self.sck.gettimeout()
-        except socket.timeout:
+        if self.sck is None or type(self.sck) is not classmethod:
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
             self.sck.settimeout(None)
         try:
@@ -156,6 +153,7 @@ class Ygate:
         else:
             return True
 
+
     # todo Add Logging
     def send_aprs(self, aprs_string: str) -> bool:
         """
@@ -164,30 +162,32 @@ class Ygate:
         :return: Boolean indicating Success or failure
         """
         l_time = time.strftime("%H:%M:%S")
+        err = ''
         try:
-            self.sck.sendall(bytes(aprs_string, "ascii"))
-            print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
-            return True
+            if self.is_internet():
+                self.sck.sendall(bytes(aprs_string, "ascii"))
+                print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                return True
+            else:
+                err = "No internet"
         except TimeoutError as msg:
-            print(
-                f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
-            )
-        # except BrokenPipeError as msg:
-            # time.sleep(2.)
+            err = msg.strerror
+        except BrokenPipeError as msg:
+            err = msg.strerror
         except OSError as msg:
+            err = msg.strerror
+        if len(err) > 0:
             print(
-                f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
+                f"{l_time} {Color.YELLOW}{err} Trying to re-establish connection ...{Color.END}"
             )
-        finally:
             time.sleep(2.)
-            self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if self.aprs_con():
+            if self.aprs_con:
                 self.sck.sendall(bytes(aprs_string, "ascii"))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 print(
-                    f"{l_time} {Color.YELLOW}No internet, not sent: {aprs_string.strip()}{Color.END}"
+                    f"{l_time} {Color.RED}Not sent: {Color.YELLOW}{aprs_string.strip()}{Color.END}"
                 )
                 return False
 
@@ -197,14 +197,7 @@ class Ygate:
         """
         position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
         threading.Timer(self.BEACON, self.send_my_position).start()
-        try:
-            self.send_aprs(position_string)
-        except BrokenPipeError as err:
-            if self.aprs_con():
-                self.send_aprs(position_string)
-            else:
-                l_t = time.strftime("%H:%M:%S")
-                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
+        self.send_aprs(position_string)
 
     def send_bulletin(self):
         """
@@ -212,14 +205,7 @@ class Ygate:
         """
         bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
-        try:
-            self.send_aprs(bulletin)
-        except BrokenPipeError as err:
-            if self.aprs_con():
-                self.send_aprs(bulletin)
-            else:
-                l_t = time.strftime("%H:%M:%S")
-                print(f"{l_t} {Color.YELLOW}Cannot connect to APRS server:{Color.END} {str(err)}")
+        self.send_aprs(bulletin)
 
     def open_serial(self):
         try:
@@ -234,43 +220,46 @@ class Ygate:
 
     def start(self):
         signal.signal(signal.SIGINT, self.signal_handler)
-
         loc_time = time.strftime("%H:%M:%S")
         loc_date = time.strftime("%y-%m-%d")
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" "* 9 + f"Position: {self.pos}")
-
         ser = self.open_serial()
-        self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
         if self.is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
-            if self.aprs_con():
+            if self.aprs_con:
                 self.send_my_position()
                 self.send_bulletin()
             else:
                 print(
-                    f"{loc_time} {Color.YELLOW}No connection to APRS server{Color.END}"
+                    f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
                 )
+                ser.close()
+                exit(0)
         else:
             print(f"{loc_time} {Color.RED}No internet available{Color.END}")
             ser.close()
             exit(0)
+
         while True:
             b_read = self.ser.read_until()
             line = b_read.decode("ascii").strip("\n\r")
             # print(f'{Color.PURPLE}{line}{Color.END}')  # debug only
+
             if re.search(" \[.*\] <UI.*>:", line):  # contains " [date time] <UI *>"
                 localtime = time.strftime("%H:%M:%S")
                 routing = line
-                # replace "[...]<...>" with ",qAR,Call:"
-                routing = re.sub(" \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing)
-                # next non-empty line is the payload
-                b_read = self.ser.read_until()
+                routing = re.sub(
+                    " \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
+                ) # replace "[...]<...>" with ",qAR,Call:"
+                b_read = self.ser.read_until() # payload
+
                 try:
                     payload = b_read.decode("ascii").strip("\n\r")
                     packet = bytes(routing + payload + "\r\n", "ascii")  # byte string
+                    # print(f'{Color.PURPLE}{packet}{Color.END}')  # debug only
                 except UnicodeDecodeError as msg:
                     print(
                         f"{localtime} {Color.YELLOW}DecodeError: {routing}{Color.END}"
@@ -279,6 +268,7 @@ class Ygate:
                     print(f"         {b_read}")
                     packet = bytes(routing, "ascii") + b_read  # byte string
                     payload = " "
+
                 if len(payload) == 0:
                     message = "No Payload, not gated"
                 elif re.search(",TCP", routing):  # drop packets sourced from internet
@@ -293,35 +283,28 @@ class Ygate:
                     message = "NOGATE, not gated"
                 else:
                     message = f"{packet}"[2:-5]  # no b' and \r\n
+                    # print(f'{Color.PURPLE}{message}{Color.END}')  # debug only
+                    err = ''
                     try:
-                        if self.is_internet():
-                            self.sck.sendall(
-                                packet
-                            )  # spec calls for cr/lf, just lf worked in practice too
-                            print(f"{localtime} {message}")
-                            message = ""
-                        else:
-                            message = "No Internet, packet not gated"
-
-
+                        self.sck.sendall(packet)
+                        print(f"{localtime} {message}")
+                        message = ""
                     except TimeoutError:
-                        time.sleep(1.)
-                    # except BrokenPipeError as msg:
-                        # time.sleep(1.)
+                        err = "Timeout"
+                    except BrokenPipeError:
+                        err = "BrokenPipe"
                     except OSError:
-                        time.sleep(1.)
-                    finally:
-                        self.sck = socket.socket(
-                            socket.AF_INET, socket.SOCK_STREAM
-                        )  # open socket
-                        if self.aprs_con():  # try to reconnect
+                        err = "OSError"
+                    if len(err) > 0:  # try to reconnect
+                        if self.aprs_con:
                             self.sck.sendall(
                                 packet
                             )
                             print(f"{localtime} {message}")
                             message = ""
                         else:
-                            message = "No network/internet, not gated"
+                            message = f"No network/internet: {err}, not gated"
+
                 if len(message) > 0:
                     print(
                         f"{localtime} {Color.YELLOW}{message}: "
@@ -329,15 +312,16 @@ class Ygate:
                         + Color.END
                     )
 
-igate = Ygate(
-    "rotate.aprs2.net",
-    14580,
-    "DU1KG-10",
-    "16892",
-    (14, 7.09, "N"),
-    (120, 58.07, "E"),
-    "IGate RF-IS 144.10 - 73 Klaus",
-    900,
-    "/dev/ttyUSB0",
-)
-igate.start()
+if __name__ == '__main__':
+    igate = Ygate(
+        "rotate.aprs2.net",
+        14580,
+        "DU1KG-10",
+        "16892",
+        (14, 7.09, "N"),
+        (120, 58.07, "E"),
+        "IGate RF-IS 144.10 - test phase - 73 Klaus",
+        900.0,
+        "/dev/tty.usbserial-14110",
+    )
+    igate.start()
