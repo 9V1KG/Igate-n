@@ -70,7 +70,7 @@ class Ygate:
         self.LAT = LAT
         self.PASS = PASS
         self.USER = USER
-        self.BLN1 = f"{USER} iGate up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
+        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc - Covid-19: stay home, keep safe!"  # Bulletin
         self.pos = self.format_position(self.LON, self.LAT)
         self.ser = None
         self.sck = None
@@ -169,15 +169,17 @@ class Ygate:
             print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
             return True
         except TimeoutError as msg:
-            time.sleep(2.)
-#        except BrokenPipeError as msg:
-#            time.sleep(2.)
-        except OSError as msg:
-            time.sleep(2.)
-        finally:
             print(
                 f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
             )
+        # except BrokenPipeError as msg:
+            # time.sleep(2.)
+        except OSError as msg:
+            print(
+                f"{l_time} {Color.YELLOW}Connection to APRS server lost{Color.END} {msg}"
+            )
+        finally:
+            time.sleep(2.)
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.aprs_con():
                 self.sck.sendall(bytes(aprs_string, "ascii"))
@@ -302,11 +304,11 @@ class Ygate:
                             message = "No Internet, packet not gated"
 
 
-                    except TimeoutError as msg:
+                    except TimeoutError:
                         time.sleep(1.)
                     # except BrokenPipeError as msg:
                         # time.sleep(1.)
-                    except OSError as msg:
+                    except OSError:
                         time.sleep(1.)
                     finally:
                         self.sck = socket.socket(
@@ -327,4 +329,15 @@ class Ygate:
                         + Color.END
                     )
 
-igate = Ygate().start()
+igate = Ygate(
+    "rotate.aprs2.net",
+    14580,
+    "DU1KG-10",
+    "16892",
+    (14, 7.09, "N"),
+    (120, 58.07, "E"),
+    "IGate RF-IS 144.10 - 73 Klaus",
+    900,
+    "/dev/ttyUSB0",
+)
+igate.start()
