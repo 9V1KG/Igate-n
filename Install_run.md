@@ -35,7 +35,7 @@ rm -Rf YaesuTest
 mkdir YaesuTest && cd YaesuTest
 git clone https://github.com/9V1KG/Igate-n.git
 cd IGate-n	
-python setup.py install
+python3 setup.py install
 ```
 
 

@@ -36,12 +36,10 @@ class Color:
     END = "\033[1;37;0m"
 
 
-def format_position(
-        lon: tuple, lat: tuple
-) -> str:
+def format_position(lon: tuple, lat: tuple) -> str:
     """
-     # Formatted APRS Position String uncompressed
-    :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
+    # Formatted APRS Position String uncompressed
+   :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
     """
@@ -92,7 +90,6 @@ def pos_compress(
         lstr += chr(33 + int('00110010', 2) + 33)  # comp type altitude
     return lstr
 
-
 def is_internet(
         url: str = "http://www.google.com/", timeout: int = 30
 ) -> bool:
@@ -114,8 +111,8 @@ def is_internet(
         return False
     except requests.ConnectionError:
         return False
-
-
+      
+      
 class Ygate:
     HOURLY = 3600.0
 
@@ -259,6 +256,7 @@ class Ygate:
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
+    # todo no return self.ser necessary
     def open_serial(self):
         try:
             # open first usb serial port
@@ -278,6 +276,7 @@ class Ygate:
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos}")
+
         self.open_serial()
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
@@ -307,7 +306,6 @@ class Ygate:
                     " \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
                 )  # replace "[...]<...>" with ",qAR,Call:"
                 b_read = self.ser.read_until()  # payload
-
                 try:
                     payload = b_read.decode("ascii").strip("\n\r")
                     packet = bytes(routing + payload + "\r\n", "ascii")  # byte string
@@ -366,16 +364,5 @@ class Ygate:
 
 
 if __name__ == '__main__':
-    igate = Ygate(
-        "DU1KG-10",
-        "16892",
-        (14, 7.09, "N"),
-        (120, 58.07, "E"),
-        (670.,"m"),
-        "/dev/ttyUSB0",
-        "IGate RF-IS 144.10 - test phase - 73 Klaus",
-        900.0,
-        "rotate.aprs2.net",
-        14580
-    )
+    igate = Ygate()
     igate.start()
