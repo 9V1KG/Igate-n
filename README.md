@@ -17,27 +17,28 @@ on Windows too
 - Runs under Python 3 (tested with 3.7 and 3.8)
 - When started, checks for serial connection 
 - Checks and recovers from lost network/internet connection
-- Beacon (and bulletin)
+- Beacon of your position and altitude in compressed format
+- Hourly bulletin
 - Checks packet payload decoding
 - Colored terminal text output (yellow for warnings, red for errors)
 
 ## User Settings
 Please modify the following parameter in `ygaten.py` the according to your requirements:
 
-     HOST:   and 
-     PORT:   APRS server, usually do not need to be changed.
      USER:   your call sign with ssid, e.g. DU1KG-10
      PASS:   your APRS 5-digit pass code
      LAT:    Latitude and 
      LON:    Longitude of your position in the format
              (degrees, minutes as decimal number, N/S/E/W)
-     BCNTXT: Text of the beacon. The beacon will be sent every 
-     BEACON: seconds
+     ALT:    Altitude in meter "m" or feet "ft", (0.,"m") if none
      SERIAL: The driver for your com port. For MacOS it is 
              "/dev/tty.usbserial-14110", for Linux (Raspberry) 
              "/dev/ttyUSB0". For a Windows PC it will be "COM1:"
              (not tested).
-
+     BCNTXT: Text of the beacon. The beacon will be sent every 
+     BEACON: seconds
+     HOST:   and 
+     PORT:   APRS server, usually do not need to be changed.
 ## Install and Run
 
 For a simple installation as python script, copy the file `ygaten.py` into your directory 

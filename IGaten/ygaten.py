@@ -18,6 +18,7 @@ import threading
 import time
 import serial
 import re
+import math
 import requests
 import signal
 
@@ -37,8 +38,8 @@ class Color:
 
 def format_position(lon: tuple, lat: tuple) -> str:
     """
-     # Formatted APRS Position String
-    :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
+    # Formatted APRS Position String uncompressed
+   :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
     """
@@ -47,6 +48,47 @@ def format_position(lon: tuple, lat: tuple) -> str:
     pos = f"{lat}/{lon}"
     return pos
 
+
+def pos_compress(
+        lo: tuple, la: tuple, hq: tuple = (0., "m")
+) -> str:
+    """
+    :param lo: Tuple of Degree, Decimal-Minutes , "E or W"
+    :param la: Tuple of Degree, Decimal-Minutes, "N or S"
+    :param hq: Tuple of altitude, unit "m' or "ft"
+    :return: APRS compressed position string
+    """
+    lstr = "/"  # symbol table id
+    lat_dec = la[0] + la[1] / 60.
+    if "S" in la[2]:
+        lat_dec *= -1
+    lon_dec = lo[0] + lo[1] / 60.
+    if "W" in lo[2]:
+        lon_dec *= -1
+    # Compressed Latitude XXXX
+    r = int(380926 * (90. - lat_dec))
+    for i in range(0, 4):
+        dv = 91 ** (3 - i)
+        lstr += chr(int(r / dv) + 33)
+        r = r % dv
+    # Compressed Longitude YYYY
+    r = int(190463 * (180. + lon_dec))
+    for i in range(0, 4):
+        dv = 91 ** (3 - i)
+        lstr += chr(int(r / dv) + 33)
+        r = r % dv
+    lstr += "#"  # station symbol
+    # Altitude
+    hf = hq[0]
+    if hq[1] == "m":
+        hf /= 0.3048  # calculate feet
+    if hf == 0.:
+        lstr += "   "  # no altitude data
+    else:  # csT bytes
+        a = int(math.log(hf) / math.log(1.002))
+        lstr += chr(33 + int(a / 91)) + chr(33 + int(a % 91))
+        lstr += chr(33 + int('00110010', 2) + 33)  # comp type altitude
+    return lstr
 
 def is_internet(
         url: str = "http://www.google.com/", timeout: int = 30
@@ -69,37 +111,37 @@ def is_internet(
         return False
     except requests.ConnectionError:
         return False
-
-
+      
+      
 class Ygate:
-
     HOURLY = 3600.0
 
     def __init__(
-        self,
-        HOST="rotate.aprs2.net",
-        PORT=14580,
-        USER="MYCALL-10",
-        PASS="00000",
-        LAT=(14, 8.09, "N"),
-        LON=(119, 55.07, "E"),
-        BCNTXT="IGate RF-IS 144.39 - 73",
-        BEACON=900.0,
-        SERIAL="/dev/ttyUSB0",
+            self,
+            USER="MYCALL-10",
+            PASS="00000",
+            LAT=(14, 8.09, "N"),
+            LON=(119, 55.07, "E"),
+            ALT=(0.,"m"),
+            SERIAL="/dev/ttyUSB0",
+            BCNTXT="IGate RF-IS 144.39 - 73",
+            BEACON=900.0,
+            HOST="rotate.aprs2.net",
+            PORT=14580,
     ):
         """
-        Class initializer
-
-        :param HOST:
-        :param PORT:
-        :param USER:
-        :param PASS:
-        :param LAT:
-        :param LON:
-        :param BCNTXT:
-        :param BEACON:
-        :param SERIAL:
+        :param USER:   Your callsign with ssid (-10 for igate)
+        :param PASS:   Your aprs secret code
+        :param LAT:    Latitude
+        :param LON:    Longitude
+        :param ALT:    Altitude in ft or m, 0. if no altitude
+        :param BCNTXT: Beacon text
+        :param SERIAL: Driver location for serial interface
+        :param BEACON: Beacon frequency in seconds
+        :param HOST:   APRS internet server
+        :param PORT:   APRS internet server port
         """
+
         self.PORT = PORT
         self.HOST = HOST
         self.SERIAL = SERIAL
@@ -107,12 +149,15 @@ class Ygate:
         self.BCNTXT = BCNTXT
         self.LON = LON
         self.LAT = LAT
+        self.ALT = ALT
         self.PASS = PASS
         self.USER = USER
         self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
-        self.pos = format_position(self.LON, self.LAT)
         self.ser = None
         self.sck = None
+
+        self.pos = format_position(self.LON, self.LAT)
+        self.pos_c = pos_compress(self.LON, self.LAT, (570., "m"))
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -198,7 +243,8 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
+        #  position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
+        position_string = f"{self.USER}>APRS,TCPIP*:={self.pos_c}{self.BCNTXT}\n"
         threading.Timer(self.BEACON, self.send_my_position).start()
         self.send_aprs(position_string)
 
@@ -215,7 +261,7 @@ class Ygate:
         try:
             # open first usb serial port
             self.ser = serial.Serial(self.SERIAL, 9600)
-            return self.ser
+            return
         except Exception as err:
             print(" " * 9 + f"{Color.RED}Serial interface cannot be initialized{Color.END}")
             print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
@@ -230,7 +276,8 @@ class Ygate:
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos}")
-        ser = self.open_serial()
+
+        self.open_serial()
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con:
@@ -244,7 +291,7 @@ class Ygate:
                 exit(0)
         else:
             print(f"{loc_time} {Color.RED}No internet available{Color.END}")
-            ser.close()
+            self.ser.close()
             exit(0)
 
         while True:
@@ -257,9 +304,8 @@ class Ygate:
                 routing = line
                 routing = re.sub(
                     " \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
-                ) # replace "[...]<...>" with ",qAR,Call:"
-                b_read = self.ser.read_until() # payload
-
+                )  # replace "[...]<...>" with ",qAR,Call:"
+                b_read = self.ser.read_until()  # payload
                 try:
                     payload = b_read.decode("ascii").strip("\n\r")
                     packet = bytes(routing + payload + "\r\n", "ascii")  # byte string
@@ -278,7 +324,7 @@ class Ygate:
                 elif re.search(",TCP", routing):  # drop packets sourced from internet
                     message = "Internet packet not gated"
                 elif re.search(
-                    "^}.*,TCP.*:", payload
+                        "^}.*,TCP.*:", payload
                 ):  # drop packets sourced from internet in third party packets
                     message = "Internet packet not gated"
                 elif "RFONLY" in routing:
@@ -288,7 +334,7 @@ class Ygate:
                 else:
                     message = f"{packet}"[2:-5]  # no b' and \r\n
                     # print(f'{Color.PURPLE}{message}{Color.END}')  # debug only
-                    err = ''
+                    err = ""
                     try:
                         self.sck.sendall(packet)
                         print(f"{localtime} {message}")
