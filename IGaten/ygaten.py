@@ -2,14 +2,15 @@
 # This script is based on an idea from Craig Lamparter
 # https://github.com/hessu/ygate
 #
-# 9V1KG
-# Version 2020-03-20
+# 9V1KG Klaus D Goepel -
+# https://klsin.bpmsg.com
+# https://github.com/9V1KG/Igate-n
 #
 # DU3/M0FGC
 # Slight mods
 #
-# 9V1KG
 # Version 2020-03-27
+#
 
 
 import os
@@ -39,7 +40,7 @@ class Color:
 def format_position(lon: tuple, lat: tuple) -> str:
     """
     # Formatted APRS Position String uncompressed
-   :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
+    :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
     """
@@ -90,6 +91,7 @@ def pos_compress(
         lstr += chr(33 + int('00110010', 2) + 33)  # comp type altitude
     return lstr
 
+
 def is_internet(
         url: str = "http://www.google.com/", timeout: int = 30
 ) -> bool:
@@ -97,7 +99,7 @@ def is_internet(
     Is there an internet connection
     :param url: String pointing to a URL
     :param timeout: How long we wait in seconds
-    :return:
+    :return: true when internet available
     """
     try:
         req = requests.get(url, timeout=timeout)
@@ -118,16 +120,16 @@ class Ygate:
 
     def __init__(
             self,
-            USER="MYCALL-10",
-            PASS="00000",
-            LAT=(14, 8.09, "N"),
-            LON=(119, 55.07, "E"),
-            ALT=(0.,"m"),
-            SERIAL="/dev/ttyUSB0",
-            BCNTXT="IGate RF-IS 144.39 - 73",
-            BEACON=900.0,
-            HOST="rotate.aprs2.net",
-            PORT=14580,
+            USER=   "DU1KG-10",
+            PASS=   "16892",
+            LAT=    (14, 7.09, "N"),
+            LON=    (120, 58.07, "E"),
+            ALT=    (670.,"m"),
+            SERIAL= "/dev/ttyUSB0",
+            BCNTXT= "IGate RF-IS 144.1 testing phase - 73 Klaus",
+            BEACON= 900.0,
+            HOST=   "rotate.aprs2.net",
+            PORT=   14580
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -152,7 +154,7 @@ class Ygate:
         self.ALT = ALT
         self.PASS = PASS
         self.USER = USER
-        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc"  # Bulletin
+        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc - Stay home, keep safe!"  # Bulletin
         self.ser = None
         self.sck = None
 
@@ -206,7 +208,7 @@ class Ygate:
     # todo Add Logging
     def send_aprs(self, aprs_string: str) -> bool:
         """
-        Send aprs data
+        Send aprs data to APRS-IS, used for beacon and bulletin
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
@@ -256,8 +258,11 @@ class Ygate:
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
-    # todo no return self.ser necessary
     def open_serial(self):
+        """
+        Opens serial port with 9600 Bd
+        :return: exit program when serial could not be opened
+        """
         try:
             # open first usb serial port
             self.ser = serial.Serial(self.SERIAL, 9600)
@@ -269,6 +274,10 @@ class Ygate:
             exit(0)
 
     def start(self):
+        """
+        Starts Igate and runs in loop until terminated with Ctrl C
+        :return: nil
+        """
         signal.signal(signal.SIGINT, self.signal_handler)
         loc_time = time.strftime("%H:%M:%S")
         loc_date = time.strftime("%y-%m-%d")
@@ -287,7 +296,7 @@ class Ygate:
                 print(
                     f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
                 )
-                ser.close()
+                self.ser.close()
                 exit(0)
         else:
             print(f"{loc_time} {Color.RED}No internet available{Color.END}")
@@ -313,7 +322,7 @@ class Ygate:
                 except UnicodeDecodeError as msg:
                     print(
                         f"{localtime} {Color.YELLOW}DecodeError: at pos {msg.start}: "
-                        + f"{bstr[msg.start:msg.end]}{Color.END}"
+                        + f"{b_read[msg.start:msg.end]}{Color.END}"
                     )
                     print(f"         {b_read}")
                     packet = bytes(routing, "ascii") + b_read  # byte string
