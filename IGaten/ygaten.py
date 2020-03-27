@@ -9,7 +9,7 @@
 # Slight mods
 #
 # 9V1KG
-# Version 2020-03-26
+# Version 2020-03-27
 
 
 import os
@@ -266,9 +266,9 @@ class Ygate:
                     # print(f'{Color.PURPLE}{packet}{Color.END}')  # debug only
                 except UnicodeDecodeError as msg:
                     print(
-                        f"{localtime} {Color.YELLOW}DecodeError: {routing}{Color.END}"
+                        f"{localtime} {Color.YELLOW}DecodeError: at pos {msg.start}: "
+                        + f"{bstr[msg.start:msg.end]}{Color.END}"
                     )
-                    print(f"         {msg}:")
                     print(f"         {b_read}")
                     packet = bytes(routing, "ascii") + b_read  # byte string
                     payload = " "
@@ -327,6 +327,6 @@ if __name__ == '__main__':
         (120, 58.07, "E"),
         "IGate RF-IS 144.10 - test phase - 73 Klaus",
         900.0,
-        "/dev/tty.usbserial-14110",
+        "/dev/ttyUSB0",
     )
     igate.start()
