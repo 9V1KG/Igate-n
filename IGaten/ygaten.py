@@ -120,13 +120,13 @@ class Ygate:
 
     def __init__(
             self,
-            USER=   "DU1KG-10",
-            PASS=   "16892",
+            USER=   "MYCALL-10",
+            PASS=   "00000",
             LAT=    (14, 7.09, "N"),
             LON=    (120, 58.07, "E"),
             ALT=    (670.,"m"),
             SERIAL= "/dev/ttyUSB0",
-            BCNTXT= "IGate RF-IS 144.1 testing phase - 73 Klaus",
+            BCNTXT= "IGate RF-IS 144.1 testing phase - 73",
             BEACON= 900.0,
             HOST=   "rotate.aprs2.net",
             PORT=   14580
@@ -154,7 +154,7 @@ class Ygate:
         self.ALT = ALT
         self.PASS = PASS
         self.USER = USER
-        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz QRA: PK04lc - Stay home, keep safe!"  # Bulletin
+        self.BLN1 = f"{USER} iGate is up - RF-IS 144.39 MHz"  # Bulletin
         self.ser = None
         self.sck = None
 
