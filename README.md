@@ -42,19 +42,15 @@ Please modify the following parameter in `ygaten.py` the according to your requi
 
 For a simple installation as python script, copy the file `ygaten.py` into your directory 
 and make it executable.
-Modify the parameter as explained above and uncomment (remove #) of the line:
-
-    # igate = Ygate().start()
-
-Import `pySerial` and `requests` with:
+Modify the parameter as explained above. Import `pySerial` and `requests` with:
 
     pip install pySerial
     pip install requests
 
-Start the program in the command line window with: 
+Start the program from the command line window in your directory with: 
 
     python3 ygaten.py
 
-Stop the program with ctrl c.
+Stop the program with `ctrl c`.
 
 Please see the document [Install And Run](Install_run.md) for alternative installation as a module and more information.
