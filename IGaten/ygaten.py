@@ -115,7 +115,7 @@ class Ygate:
         self.sck = None
 
     # Define signal handler for ^C (exit program)
-    def signal_handler(self):
+    def signal_handler(self, interupt_signal, frame):
         print("\r\nCtrl+C, exiting.")
         self.ser.close()
         os._exit(0)
@@ -318,15 +318,5 @@ class Ygate:
 
 
 if __name__ == '__main__':
-    igate = Ygate(
-        "rotate.aprs2.net",
-        14580,
-        "DU1KG-10",
-        "16892",
-        (14,   7.09, "N"),
-        (120, 58.07, "E"),
-        "IGate RF-IS 144.10 - test phase - 73 Klaus",
-        900.0,
-        "/dev/ttyUSB0",
-    )
+    igate = Ygate()
     igate.start()
