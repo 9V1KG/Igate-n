@@ -200,7 +200,7 @@ class Ygate:
         # if second line contains "unverified", login was not successful
         login = sock_file.readline().strip()
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
-        if login.find("unverified") != -1:
+        if login.find(" verified") == -1:
             print(
                 f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}")
             exit(0)
