@@ -156,7 +156,7 @@ class Ygate:
         self.ALT = ALT
         self.PASS = PASS
         self.USER = USER
-        self.BLN1 = f"{USER} iGate is up - RF-IS 144.1 MHz"  # Bulletin
+        self.BLN1 = f"{USER} iGate is up - RF-IS 144.39 MHz"  # Bulletin
         self.ser = None
         self.sck = None
 
