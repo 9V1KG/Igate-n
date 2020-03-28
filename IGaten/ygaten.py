@@ -14,14 +14,14 @@
 
 
 import os
+import re
+import signal
 import socket
 import threading
 import time
-import serial
-import re
 import math
 import requests
-import signal
+import serial
 
 
 class Color:
@@ -44,27 +44,29 @@ def format_position(lon: tuple, lat: tuple) -> str:
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
     """
+    symbol = "/#"
     lon = "{:03d}".format(lon[0]) + "{:05.2f}".format(lon[1]) + lon[2]
     lat = "{:02d}".format(lat[0]) + "{:05.2f}".format(lat[1]) + lat[2]
-    pos = f"{lat}/{lon}"
+    pos = f"{lat}{symbol[0]}{lon}{symbol[1]}"
     return pos
 
 
-def pos_compress(
-        lo: tuple, la: tuple, hq: tuple = (0., "m")
-) -> str:
+def compress_position(
+        lon: tuple, lat: tuple, alt: tuple = (0., "m")) -> str:
     """
-    :param lo: Tuple of Degree, Decimal-Minutes , "E or W"
-    :param la: Tuple of Degree, Decimal-Minutes, "N or S"
-    :param hq: Tuple of altitude, unit "m' or "ft"
+    # Calculate compressed position info as string
+    :param lon: Tuple of Degree, Decimal-Minutes , "E or W"
+    :param lat: Tuple of Degree, Decimal-Minutes, "N or S"
+    :param alt: Tuple of altitude, unit "m' or "ft"
     :return: APRS compressed position string
     """
-    lstr = "/"  # symbol table id
-    lat_dec = la[0] + la[1] / 60.
-    if "S" in la[2]:
+    symbol = "/#"
+    lstr = symbol[0]  # symbol table id
+    lat_dec = lat[0] + lat[1] / 60.
+    if "S" in lat[2]:
         lat_dec *= -1
-    lon_dec = lo[0] + lo[1] / 60.
-    if "W" in lo[2]:
+    lon_dec = lon[0] + lon[1] / 60.
+    if "W" in lon[2]:
         lon_dec *= -1
     # Compressed Latitude XXXX
     r = int(380926 * (90. - lat_dec))
@@ -78,10 +80,10 @@ def pos_compress(
         dv = 91 ** (3 - i)
         lstr += chr(int(r / dv) + 33)
         r = r % dv
-    lstr += "#"  # station symbol
+    lstr += symbol[1]  # station symbol
     # Altitude
-    hf = hq[0]
-    if hq[1] == "m":
+    hf = alt[0]
+    if alt[1] == "m":
         hf /= 0.3048  # calculate feet
     if hf == 0.:
         lstr += "   "  # no altitude data
@@ -122,8 +124,8 @@ class Ygate:
             self,
             USER=   "MYCALL-10",
             PASS=   "00000",
-            LAT=    (14, 7.09, "N"),
-            LON=    (120, 58.07, "E"),
+            LAT=    (14, 5.09, "N"),
+            LON=    (119, 58.07, "E"),
             ALT=    (670.,"m"),
             SERIAL= "/dev/ttyUSB0",
             BCNTXT= "IGate RF-IS 144.1 testing phase - 73",
@@ -158,8 +160,8 @@ class Ygate:
         self.ser = None
         self.sck = None
 
-        self.pos = format_position(self.LON, self.LAT)
-        self.pos_c = pos_compress(self.LON, self.LAT, (570., "m"))
+        self.pos_f = format_position(self.LON, self.LAT)
+        self.pos_c = compress_position(self.LON, self.LAT, self.ALT)
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -198,7 +200,7 @@ class Ygate:
         # if second line contains "unverified", login was not successful
         login = sock_file.readline().strip()
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
-        if login.find("unverified") != -1:
+        if login.find(" verified") == -1:
             print(
                 f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}")
             exit(0)
@@ -245,7 +247,6 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        #  position_string = f"{self.USER}>APRS,TCPIP*:={self.pos}#{self.BCNTXT}\n"
         position_string = f"{self.USER}>APRS,TCPIP*:={self.pos_c}{self.BCNTXT}\n"
         threading.Timer(self.BEACON, self.send_my_position).start()
         self.send_aprs(position_string)
@@ -284,7 +285,7 @@ class Ygate:
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
-        print(" " * 9 + f"Position: {self.pos}")
+        print(" " * 9 + f"Position: {self.pos_f}")
 
         self.open_serial()
         if is_internet():  # check internet connection
