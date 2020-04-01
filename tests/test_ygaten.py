@@ -25,22 +25,22 @@ class TestYGate(TestCase):
 
     def test_format_position(self):
         self.assertEqual(
-            IGaten.functions.format_position((14, 8.09, "N"), (119, 55.07, "E")),
+            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "E")),
             "11955.07E/01408.09N#",
         )
 
         self.assertEqual(
-            IGaten.functions.format_position((14, 8.09, "S"), (119, 55.07, "E")),
+            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "E")),
             "11955.07E/01408.09S#",
         )
 
         self.assertEqual(
-            IGaten.functions.format_position((14, 8.09, "N"), (119, 55.07, "W")),
+            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "W")),
             "11955.07W/01408.09N#",
         )
 
         self.assertEqual(
-            IGaten.functions.format_position((14, 8.09, "S"), (119, 55.07, "W")),
+            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "W")),
             "11955.07W/01408.09S#",
         )
 
@@ -48,7 +48,7 @@ class TestYGate(TestCase):
         # Method
         # todo Validate input to format position
         self.assertEqual(
-            IGaten.functions.format_position((14, 78.09, "S"), (119, 55.07, "W")),
+            IGaten.format_position((14, 78.09, "S"), (119, 55.07, "W")),
             "11955.07W/01478.09S#",
         )
 
