@@ -44,7 +44,6 @@ class TestYGate(TestCase):
             "11955.07W/01408.09S#",
         )
 
-
         # This test should fail ... but there is no validation in the format position
         # Method
         # todo Validate input to format position
@@ -75,5 +74,3 @@ class TestYGate(TestCase):
     def test_open_serial(self, mock_open_serial):
         mock_open_serial.return_value = True
         self.assertEqual(self.lcl_ygate.open_serial(), True)
-
-
