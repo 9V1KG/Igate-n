@@ -20,21 +20,11 @@ import socket
 import threading
 import time
 import math
-import requests
 import serial
 
 
-class Color:
-    PURPLE = "\033[1;35;48m"
-    CYAN = "\033[1;36;48m"
-    BOLD = "\033[1;37;48m"
-    BLUE = "\033[1;34;48m"
-    GREEN = "\033[1;32;48m"
-    YELLOW = "\033[1;33;48m"
-    RED = "\033[1;31;48m"
-    BLACK = "\033[1;30;48m"
-    UNDERLINE = "\033[4;37;48m"
-    END = "\033[1;37;0m"
+import requests
+import math
 
 
 def format_position(lon: tuple, lat: tuple) -> str:
@@ -50,6 +40,7 @@ def format_position(lon: tuple, lat: tuple) -> str:
     pos = f"{lat}{symbol[0]}{lon}{symbol[1]}"
     return pos
 
+
 def b91(r) -> str:
     """
     # Calculates 4 char ASCII string base 91 from r
@@ -64,9 +55,7 @@ def b91(r) -> str:
     return ls
 
 
-def compress_position(
-        lon: tuple, lat: tuple, alt: tuple = (0., "m")
-) -> str:
+def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     """
     # Calculate compressed position info as string
     # uses b91(r)
@@ -76,33 +65,31 @@ def compress_position(
     :return: APRS compressed position string
     """
     symbol = "/#"  # Gateway symbol
-    lat_dec = lat[0] + lat[1] / 60.
+    lat_dec = lat[0] + lat[1] / 60.0
     if "S" in lat[2]:
         lat_dec *= -1
-    lon_dec = lon[0] + lon[1] / 60.
+    lon_dec = lon[0] + lon[1] / 60.0
     if "W" in lon[2]:
         lon_dec *= -1
     lstr = symbol[0]  # symbol table id
-    r = int(380926 * ( 90. - lat_dec))
+    r = int(380926 * (90.0 - lat_dec))
     lstr += b91(r)  # Compressed Latitude XXXX
-    r = int(190463 * (180. + lon_dec))
+    r = int(190463 * (180.0 + lon_dec))
     lstr += b91(r)  # Compressed Longitude YYYY
     lstr += symbol[1]  # station symbol
     hf = alt[0]  # Altitude
     if alt[1] == "m":
         hf /= 0.3048  # calculate feet
-    if hf == 0.:
+    if hf == 0.0:
         lstr += "   "  # no altitude data
     else:  # csT bytes
         a = int(math.log(hf) / math.log(1.002))
         lstr += chr(33 + int(a / 91)) + chr(33 + int(a % 91))
-        lstr += chr(33 + int('00110010', 2) + 33)  # comp type altitude
+        lstr += chr(33 + int("00110010", 2) + 33)  # comp type altitude
     return lstr
 
 
-def is_internet(
-        url: str = "http://www.google.com/", timeout: int = 30
-) -> bool:
+def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
     """
     Is there an internet connection
     :param url: String pointing to a URL
@@ -121,23 +108,41 @@ def is_internet(
         return False
     except requests.ConnectionError:
         return False
-      
-      
+
+
+""""
+Colors used by the ygaten project
+"""
+
+
+class Color:
+    PURPLE = "\033[1;35;48m"
+    CYAN = "\033[1;36;48m"
+    BOLD = "\033[1;37;48m"
+    BLUE = "\033[1;34;48m"
+    GREEN = "\033[1;32;48m"
+    YELLOW = "\033[1;33;48m"
+    RED = "\033[1;31;48m"
+    BLACK = "\033[1;30;48m"
+    UNDERLINE = "\033[4;37;48m"
+    END = "\033[1;37;0m"
+
+
 class Ygate:
     HOURLY = 3600.0
 
     def __init__(
-            self,
-            USER=   "MYCALL-10",
-            PASS=   "00000",
-            LAT=    (14, 5.09, "N"),
-            LON=    (119, 58.07, "E"),
-            ALT=    (670.,"m"),
-            SERIAL= "/dev/ttyUSB0",
-            BCNTXT= "IGate RF-IS 144.1 testing phase - 73",
-            BEACON= 900.0,
-            HOST=   "rotate.aprs2.net",
-            PORT=   14580
+        self,
+        USER="MYCALL-10",
+        PASS="00000",
+        LAT=(14, 5.09, "N"),
+        LON=(119, 58.07, "E"),
+        ALT=(670.0, "m"),
+        SERIAL="/dev/ttyUSB0",
+        BCNTXT="IGate RF-IS 144.1 testing phase - 73",
+        BEACON=900.0,
+        HOST="rotate.aprs2.net",
+        PORT=14580,
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -200,10 +205,8 @@ class Ygate:
         self.sck.sendall(
             bytes(f"user {self.USER} pass {self.PASS} vers ygate-n 0.5\n", "ascii")
         )
-        login = sock_file.readline().strip() # 1st response line
-        print(
-            f"{l_time}  {Color.GREEN}{login}{Color.END}"
-        )
+        login = sock_file.readline().strip()  # 1st response line
+        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         # if second line contains "unverified", login was not successful
         login = sock_file.readline().strip()  # 2nd response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
@@ -211,11 +214,13 @@ class Ygate:
             return True
         elif login.find("# ") >= 0 and login.find("unverified") == -1:
             print(
-                f"{l_time} {Color.YELLOW}Something during login went wrong.{Color.END}")
+                f"{l_time} {Color.YELLOW}Something during login went wrong.{Color.END}"
+            )
             return True
         else:
             print(
-                f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}")
+                f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}"
+            )
             exit(0)
 
     # todo Add Logging
@@ -243,7 +248,7 @@ class Ygate:
             print(
                 f"{l_time} {Color.YELLOW}{err} Trying to re-establish connection ...{Color.END}"
             )
-            time.sleep(2.)
+            time.sleep(2.0)
             if self.aprs_con:
                 self.sck.sendall(bytes(aprs_string, "ascii"))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
@@ -280,7 +285,10 @@ class Ygate:
             self.ser = serial.Serial(self.SERIAL, 9600)
             return
         except Exception as err:
-            print(" " * 9 + f"{Color.RED}Serial interface cannot be initialized{Color.END}")
+            print(
+                " " * 9
+                + f"{Color.RED}Serial interface cannot be initialized{Color.END}"
+            )
             print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
@@ -329,7 +337,9 @@ class Ygate:
                     b_read = self.ser.read_until()  # payload
                     try:
                         payload = b_read.decode("ascii").strip("\n\r")
-                        packet = bytes(routing + payload + "\r\n", "ascii")  # byte string
+                        packet = bytes(
+                            routing + payload + "\r\n", "ascii"
+                        )  # byte string
                         # print(f'{Color.PURPLE}{packet}{Color.END}')  # debug only
                     except UnicodeDecodeError as msg:
                         print(
@@ -342,11 +352,13 @@ class Ygate:
 
                     if len(payload) == 0:
                         message = "No Payload, not gated"
-                    elif re.search(r",TCP", routing):  # drop packets sourced from internet
+                    elif re.search(
+                        r",TCP", routing
+                    ):  # drop packets sourced from internet
                         message = "Internet packet not gated"
                     elif re.search(
-                         r"^}.*,TCP.*:", payload
-                         ):  # drop packets sourced from internet in third party packets
+                        r"^}.*,TCP.*:", payload
+                    ):  # drop packets sourced from internet in third party packets
                         message = "Internet packet not gated"
                     elif "RFONLY" in routing:
                         message = "RFONLY, not gated"
@@ -368,9 +380,7 @@ class Ygate:
                             err = "OSError"
                         if len(err) > 0:  # try to reconnect
                             if self.aprs_con:
-                                self.sck.sendall(
-                                    packet
-                                )
+                                self.sck.sendall(packet)
                                 print(f"{localtime} {message}")
                                 message = ""
                             else:
@@ -390,6 +400,6 @@ class Ygate:
                 print(" " * 9 + f"{b_read}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     igate = Ygate()
     igate.start()

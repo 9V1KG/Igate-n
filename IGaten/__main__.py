@@ -1,8 +1,5 @@
 # Main program
-from IGaten import Ygate, Color
-import serial
-import signal
-import time
+from IGaten import Ygate
 
 if __name__ == "__main__":
     yg = Ygate()
