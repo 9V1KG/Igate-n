@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-03-31
+# Version 2020-04-02
 #
 
 
@@ -180,6 +180,27 @@ class Ygate:
         self.ser.close()
         os._exit(0)
 
+    def decode_ascii(self, bstr) -> tuple:
+        """
+        Decodes byte string highlighting decode errors
+        :param bstr: Byte string to be decoded
+        :return: number of invalid bytes, string with non ascii bytes highlighted
+        """
+        nb = 0
+        pl = ""
+        dn = len(bstr)
+        while dn > 0:
+            try:
+                pl += bstr.decode("ascii").strip("\n\r")
+                dn = 0
+            except UnicodeDecodeError as msg:
+                pl += (f"{bstr[:msg.start]}"[2:-1]) + Color.RED
+                pl += (f"{bstr[msg.start:msg.end]}"[2:-1]) + Color.END
+                bstr = bstr[msg.end:]
+                dn = len(bstr)
+                nb +=1
+        return nb, pl
+
     @property
     def aprs_con(self) -> bool:
         """
@@ -212,10 +233,8 @@ class Ygate:
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
-        elif login.find("# ") >= 0 and login.find("unverified") == -1:
-            print(
-                f"{l_time} {Color.YELLOW}Something during login went wrong.{Color.END}"
-            )
+        elif login.find("# aprsc") >= 0 and login.find("unverified") == -1:
+            # aprs server sends every 20 sec one comment line when logged in
             return True
         else:
             print(
@@ -238,11 +257,7 @@ class Ygate:
                 return True
             else:
                 err = "No internet"
-        except TimeoutError as msg:
-            err = msg.strerror
-        except BrokenPipeError as msg:
-            err = msg.strerror
-        except OSError as msg:
+        except (TimeoutError, BrokenPipeError, OSError) as msg:
             err = msg.strerror
         if len(err) > 0:
             print(
@@ -293,25 +308,24 @@ class Ygate:
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
 
-    def start(self):
+    def startup(self):
         """
-        Starts Igate and runs in loop until terminated with Ctrl C
-        :return: nil
+        Check that internet and serial are available, if yes, send beacon & bulletin
+        :return:
         """
-        signal.signal(signal.SIGINT, self.signal_handler)
-        loc_time = time.strftime("%H:%M:%S")
         loc_date = time.strftime("%y-%m-%d")
         print(
             f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos_f}")
-
+        loc_time = time.strftime("%H:%M:%S")
         self.open_serial()
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con:
                 self.send_my_position()
                 self.send_bulletin()
+                return
             else:
                 print(
                     f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
@@ -323,42 +337,39 @@ class Ygate:
             self.ser.close()
             exit(0)
 
+    def start(self):
+        """
+        Starts Igate and runs in loop until terminated with Ctrl C
+        :return: nil
+        """
+        signal.signal(signal.SIGINT, self.signal_handler)
+        self.startup()
+
         while True:
             b_read = self.ser.read_until()
-            try:
-                line = b_read.decode("ascii").strip("\n\r")
-                # print(f'{Color.PURPLE}{line}{Color.END}')  # debug only
-                if re.search(" \[.*\] <UI.*>:", line):  # contains " [date time] <UI *>"
+            res = self.decode_ascii(b_read)
+            # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
+            if res[0] > 0:
+                pass  # ascii decode error, do nothing
+            else:
+                if re.search(r" \[.*\] <UI.*>:", res[1]):  # contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
-                    routing = line
+                    routing = res[1]
                     routing = re.sub(
-                        " \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
+                        r" \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
                     b_read = self.ser.read_until()  # payload
-                    try:
-                        payload = b_read.decode("ascii").strip("\n\r")
-                        packet = bytes(
-                            routing + payload + "\r\n", "ascii"
-                        )  # byte string
-                        # print(f'{Color.PURPLE}{packet}{Color.END}')  # debug only
-                    except UnicodeDecodeError as msg:
-                        print(
-                            f"{localtime} {Color.YELLOW}DecodeError: at pos {msg.start}: "
-                            + f"{b_read[msg.start:msg.end]}{Color.END}"
-                        )
-                        print(f"         {b_read}")
-                        packet = bytes(routing, "ascii") + b_read  # byte string
-                        payload = " "
-
+                    res = self.decode_ascii(b_read)
+                    # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
+                    payload = res[1]
+                    packet = bytes(routing, "ascii") + b_read  # byte string
                     if len(payload) == 0:
                         message = "No Payload, not gated"
-                    elif re.search(
-                        r",TCP", routing
-                    ):  # drop packets sourced from internet
+                    elif re.search(r",TCP", routing):
+                        # drop packets sourced from internet
                         message = "Internet packet not gated"
-                    elif re.search(
-                        r"^}.*,TCP.*:", payload
-                    ):  # drop packets sourced from internet in third party packets
+                    elif re.search(r"^}.*,TCP.*:", payload):
+                        # drop packets sourced from internet in third party packets
                         message = "Internet packet not gated"
                     elif "RFONLY" in routing:
                         message = "RFONLY, not gated"
@@ -372,32 +383,22 @@ class Ygate:
                             self.sck.sendall(packet)
                             print(f"{localtime} {message}")
                             message = ""
-                        except TimeoutError:
-                            err = "Timeout"
-                        except BrokenPipeError:
-                            err = "BrokenPipe"
-                        except OSError:
-                            err = "OSError"
+                        except (TimeoutError, BrokenPipeError, OSError):
+                            err = "No network/internet"
                         if len(err) > 0:  # try to reconnect
                             if self.aprs_con:
                                 self.sck.sendall(packet)
                                 print(f"{localtime} {message}")
                                 message = ""
                             else:
-                                message = f"No network/internet: {err}, not gated"
-                        if len(message) > 0:
-                            print(
-                                f"{localtime} {Color.YELLOW}{message}: "
-                                + f"{packet}"[2:-5]
-                                + Color.END
+                                message = f"{err}, not gated"
+
+                    if len(message) > 0:
+                        print(
+                            f"{localtime} {Color.YELLOW}{message}: "
+                            + f"{packet}"[2:-5]
+                            + Color.END
                             )
-            except UnicodeDecodeError as msg:
-                localtime = time.strftime("%H:%M:%S")
-                print(
-                    f"{localtime} {Color.YELLOW}Packet with DecodeError: at pos {msg.start}: "
-                    + f"{b_read[msg.start:msg.end]}{Color.END}:"
-                )
-                print(" " * 9 + f"{b_read}")
 
 
 if __name__ == "__main__":
