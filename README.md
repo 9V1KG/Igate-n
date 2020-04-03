@@ -19,8 +19,8 @@ on Windows too
 - Checks and recovers from lost network/internet connection
 - Beacon of your position and altitude in compressed format
 - Hourly bulletin
-- Checks packet payload decoding
-- Colored terminal text output (yellow for warnings, red for errors)
+- Checks packet payload decoding and highlight invalid bytes 
+- Colored terminal text output
 
 ## User Settings
 Please modify the following parameter in `ygaten.py` the according to your requirements:
@@ -39,6 +39,16 @@ Please modify the following parameter in `ygaten.py` the according to your requi
      BEACON: seconds
      HOST:   and 
      PORT:   APRS server, usually do not need to be changed.
+## Radio Setup FTM-400
+    Setup -> APRS -> 5 APRS Modem -> ON
+    Setup -> DATA -> 1 COM PORT SETTINGS
+        SPEED     -> 9600 bps
+        OUTPUT    -> PACKET
+        WP FORMAT -> NMEA 9
+    Setup -> DATA -> 3 DATA SPEED
+        APRS 1200 bps
+        DATA 9600 bps
+
 ## Install and Run
 
 For a simple installation as python script, copy the file `ygaten.py` into your directory 
