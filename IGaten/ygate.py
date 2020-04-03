@@ -111,6 +111,20 @@ def decode_ascii(bstr) -> tuple:
     return nb, pl
 
 
+def is_routing(p_str) -> bool:
+    """
+    Check whether p_str is a valid routing packet
+    :param p_str: String to be checked
+    :return: true if valid
+    """
+    # check for valid call sign at the beginning of the string
+    m = re.match(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}",p_str)
+    if m:
+        return True
+    else:
+        return False
+
+
 def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
     """
     Is there an internet connection
@@ -157,12 +171,11 @@ class Ygate:
         PASS = "00000",
         LAT = (14, 5.09, "N"),
         LON = (119, 58.07, "E"),
-        ALT = (670.0, "m"),
+        ALT = (0.0, "m"),
         SERIAL = "/dev/ttyUSB0",
-        BCNTXT = "IGate RF-IS 144.39 testing phase - 73",
+        BCNTXT = "IGate RF-IS 144.39 - 73",
         BEACON = 900.0,
-        HOST= "rotate.aprs2.net",
-        PORT= 14580,
+        BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -170,29 +183,28 @@ class Ygate:
         :param LAT:    Latitude
         :param LON:    Longitude
         :param ALT:    Altitude in ft or m, 0. if no altitude
-        :param BCNTXT: Beacon text
         :param SERIAL: Driver location for serial interface
+        :param BCNTXT: Beacon text
         :param BEACON: Beacon frequency in seconds
-        :param HOST:   APRS internet server
-        :param PORT:   APRS internet server port
+        :param BLNTXT: Beacon text
         """
 
-        self.USER = USER
-        self.PASS = PASS
-        self.LAT = LAT
-        self.LON = LON
-        self.ALT = ALT
-        self.SERIAL = SERIAL
-        self.BCNTXT = BCNTXT
-        self.BEACON = BEACON
-        self.BLN1 = f"{USER} iGate is up - RF-IS 144.39 MHz"  # Bulletin
-        self.HOST = HOST
-        self.PORT = PORT
+        self.user = USER
+        self.secret = PASS
+        self.lat = LAT
+        self.lon = LON
+        self.alt = ALT
+        self.serial = SERIAL
+        self.beacon_txt = BCNTXT
+        self.beacon_time = BEACON
+        self.bulletin_txt = f"{USER} {BLNTXT}"  # Bulletin
 
+        self.host = "rotate.aprs2.net"
+        self.port = 14580
+        self.pos_f = format_position(self.lon, self.lat)
+        self.pos_c = compress_position(self.lon, self.lat, self.alt)
         self.ser = None
         self.sck = None
-        self.pos_f = format_position(self.LON, self.LAT)
-        self.pos_c = compress_position(self.LON, self.LAT, self.ALT)
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -211,7 +223,7 @@ class Ygate:
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
             self.sck.settimeout(None)
         try:
-            self.sck.connect((self.HOST, self.PORT))
+            self.sck.connect((self.host, self.port))
         except OSError as msg:
             print(
                 f"{l_time} {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
@@ -223,7 +235,7 @@ class Ygate:
         time.sleep(1.0)
         # Login to APRS Server
         self.sck.sendall(
-            bytes(f"user {self.USER} pass {self.PASS} vers ygate-n 0.5\n", "ascii")
+            bytes(f"user {self.user} pass {self.secret} vers ygate-n 0.5\n", "ascii")
         )
         login = sock_file.readline().strip()  # 1st response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
@@ -233,7 +245,7 @@ class Ygate:
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
         elif login.find("# aprsc") >= 0 and login.find("unverified") == -1:
-            # aprs server sends every 20 sec one comment line when logged in
+            # aprs server sends every 20 sec one comment line (#) when logged in
             return True
         else:
             print(
@@ -269,7 +281,7 @@ class Ygate:
                 return True
             else:
                 print(
-                    f"{l_time} {Color.RED}Not sent: {Color.YELLOW}{aprs_string.strip()}{Color.END}"
+                    f"{l_time} {Color.YELLOW}Not sent: {Color.END}{aprs_string.strip()}"
                 )
                 return False
 
@@ -277,15 +289,15 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        position_string = f"{self.USER}>APRS,TCPIP*:={self.pos_c}{self.BCNTXT}\n"
-        threading.Timer(self.BEACON, self.send_my_position).start()
+        position_string = f"{self.user}>APRS,TCPIP*:={self.pos_c}{self.beacon_txt}\n"
+        threading.Timer(self.beacon_time, self.send_my_position).start()
         self.send_aprs(position_string)
 
     def send_bulletin(self):
         """
         thread that sends bulletin every HOURLY sec to APRS IS
         """
-        bulletin = f"{self.USER}>APRS,TCPIP*::BLN1     :{self.BLN1}\n"
+        bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
@@ -296,7 +308,7 @@ class Ygate:
         """
         try:
             # open first usb serial port
-            self.ser = serial.Serial(self.SERIAL, 9600)
+            self.ser = serial.Serial(self.serial, 9600)
             return
         except Exception as err:
             print(
@@ -314,13 +326,13 @@ class Ygate:
         """
         loc_date = time.strftime("%y-%m-%d")
         print(
-            f"{Color.GREEN}{loc_date} {self.USER} IGgate started - Program by 9V1KG{Color.END}"
+            f"{Color.GREEN}{loc_date} {self.user} IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos_f}")
         loc_time = time.strftime("%H:%M:%S")
         self.open_serial()
         if is_internet():  # check internet connection
-            print(f"{loc_time} Logging in to {self.HOST}")
+            print(f"{loc_time} Logging in to {self.host}")
             if self.aprs_con:
                 self.send_my_position()
                 self.send_bulletin()
@@ -347,19 +359,19 @@ class Ygate:
         while True:
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
-            # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
+            # check validity, routing should start with a call sign
             if res[0] > 0:
                 print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
             else:
-                if re.search(r" \[.*\] <UI.*>:", res[1]):  # contains " [date time] <UI *>"
+                if is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
+                    # starts with a call sign and contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
                     routing = res[1]
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
+                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
                     b_read = self.ser.read_until()  # payload
                     res = decode_ascii(b_read)
-                    # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
                     payload = res[1]
                     packet = bytes(routing, "ascii") + b_read  # byte string
                     if len(payload) == 0:
@@ -376,7 +388,6 @@ class Ygate:
                         message = "NOGATE, not gated"
                     else:
                         message = routing + payload
-                        # print(f'{Color.PURPLE}{message}{Color.END}')  # debug only
                         try:
                             self.sck.sendall(packet)
                             print(f"{localtime} {message}")
@@ -395,6 +406,10 @@ class Ygate:
                             + f"{packet}"[2:-5]
                             + Color.END
                         )
+                elif len(res[1]) > 0
+                    print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
+                else:  # just \n\r disregard
+                    pass
 
 
 if __name__ == "__main__":
