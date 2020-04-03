@@ -375,7 +375,7 @@ class Ygate:
                     elif "NOGATE" in routing:
                         message = "NOGATE, not gated"
                     else:
-                        message = f"{packet}"[2:-5]  # no b' and \r\n
+                        message = routing + payload
                         # print(f'{Color.PURPLE}{message}{Color.END}')  # debug only
                         try:
                             self.sck.sendall(packet)
