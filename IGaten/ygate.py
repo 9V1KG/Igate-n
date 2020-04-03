@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-04-02
+# Version 2020-04-03
 #
 
 
@@ -19,10 +19,7 @@ import signal
 import socket
 import threading
 import time
-import math
 import serial
-
-
 import requests
 import math
 
@@ -72,11 +69,14 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     if "W" in lon[2]:
         lon_dec *= -1
     lstr = symbol[0]  # symbol table id
+
     r = int(380926 * (90.0 - lat_dec))
     lstr += b91(r)  # Compressed Latitude XXXX
+
     r = int(190463 * (180.0 + lon_dec))
     lstr += b91(r)  # Compressed Longitude YYYY
     lstr += symbol[1]  # station symbol
+
     hf = alt[0]  # Altitude
     if alt[1] == "m":
         hf /= 0.3048  # calculate feet
@@ -87,6 +87,28 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
         lstr += chr(33 + int(a / 91)) + chr(33 + int(a % 91))
         lstr += chr(33 + int("00110010", 2) + 33)  # comp type altitude
     return lstr
+
+
+def decode_ascii(bstr) -> tuple:
+    """
+    Decodes byte string highlighting decode errors
+    :param bstr: Byte string to be decoded
+    :return: number of invalid bytes, string with non ascii bytes highlighted
+    """
+    nb = 0  # number of invalid bytes
+    pl = ""
+    while len(bstr) > 0:
+        try:
+            pl += bstr.decode("ascii").strip("\n\r")
+            bstr = b""
+        except UnicodeDecodeError as msg:
+            nb += 1
+            pl += (f"{bstr[:msg.start]}"[2:-1]) \
+                + Color.RED \
+                + (f"{bstr[msg.start:msg.end]}"[2:-1]) \
+                + Color.END
+            bstr = bstr[msg.end:]
+    return nb, pl
 
 
 def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
@@ -110,12 +132,10 @@ def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
         return False
 
 
-""""
-Colors used by the ygaten project
-"""
-
-
 class Color:
+    """
+    Colors used by the ygaten project
+    """
     PURPLE = "\033[1;35;48m"
     CYAN = "\033[1;36;48m"
     BOLD = "\033[1;37;48m"
@@ -133,16 +153,16 @@ class Ygate:
 
     def __init__(
         self,
-        USER="MYCALL-10",
-        PASS="00000",
-        LAT=(14, 5.09, "N"),
-        LON=(119, 58.07, "E"),
-        ALT=(670.0, "m"),
-        SERIAL="/dev/ttyUSB0",
-        BCNTXT="IGate RF-IS 144.1 testing phase - 73",
-        BEACON=900.0,
-        HOST="rotate.aprs2.net",
-        PORT=14580,
+        USER = "MYCALL-10",
+        PASS = "00000",
+        LAT = (14, 5.09, "N"),
+        LON = (119, 58.07, "E"),
+        ALT = (670.0, "m"),
+        SERIAL = "/dev/ttyUSB0",
+        BCNTXT = "IGate RF-IS 144.39 testing phase - 73",
+        BEACON = 900.0,
+        HOST= "rotate.aprs2.net",
+        PORT= 14580,
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -157,20 +177,20 @@ class Ygate:
         :param PORT:   APRS internet server port
         """
 
-        self.PORT = PORT
-        self.HOST = HOST
-        self.SERIAL = SERIAL
-        self.BEACON = BEACON
-        self.BCNTXT = BCNTXT
-        self.LON = LON
-        self.LAT = LAT
-        self.ALT = ALT
-        self.PASS = PASS
         self.USER = USER
+        self.PASS = PASS
+        self.LAT = LAT
+        self.LON = LON
+        self.ALT = ALT
+        self.SERIAL = SERIAL
+        self.BCNTXT = BCNTXT
+        self.BEACON = BEACON
         self.BLN1 = f"{USER} iGate is up - RF-IS 144.39 MHz"  # Bulletin
+        self.HOST = HOST
+        self.PORT = PORT
+
         self.ser = None
         self.sck = None
-
         self.pos_f = format_position(self.LON, self.LAT)
         self.pos_c = compress_position(self.LON, self.LAT, self.ALT)
 
@@ -179,27 +199,6 @@ class Ygate:
         print("\r\nCtrl+C, exiting.")
         self.ser.close()
         os._exit(0)
-
-    def decode_ascii(self, bstr) -> tuple:
-        """
-        Decodes byte string highlighting decode errors
-        :param bstr: Byte string to be decoded
-        :return: number of invalid bytes, string with non ascii bytes highlighted
-        """
-        nb = 0
-        pl = ""
-        dn = len(bstr)
-        while dn > 0:
-            try:
-                pl += bstr.decode("ascii").strip("\n\r")
-                dn = 0
-            except UnicodeDecodeError as msg:
-                pl += (f"{bstr[:msg.start]}"[2:-1]) + Color.RED
-                pl += (f"{bstr[msg.start:msg.end]}"[2:-1]) + Color.END
-                bstr = bstr[msg.end:]
-                dn = len(bstr)
-                nb +=1
-        return nb, pl
 
     @property
     def aprs_con(self) -> bool:
@@ -221,7 +220,7 @@ class Ygate:
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sck.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512)  # buffer size
         sock_file = self.sck.makefile(mode="r", buffering=512)
-        time.sleep(2)
+        time.sleep(1.0)
         # Login to APRS Server
         self.sck.sendall(
             bytes(f"user {self.USER} pass {self.PASS} vers ygate-n 0.5\n", "ascii")
@@ -347,10 +346,10 @@ class Ygate:
 
         while True:
             b_read = self.ser.read_until()
-            res = self.decode_ascii(b_read)
+            res = decode_ascii(b_read)
             # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
             if res[0] > 0:
-                pass  # ascii decode error, do nothing
+                print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
             else:
                 if re.search(r" \[.*\] <UI.*>:", res[1]):  # contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
@@ -359,7 +358,7 @@ class Ygate:
                         r" \[.*\] <UI.*>:", f",qAR,{self.USER}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
                     b_read = self.ser.read_until()  # payload
-                    res = self.decode_ascii(b_read)
+                    res = decode_ascii(b_read)
                     # print(f'{Color.PURPLE}{res[1]}{Color.END}')  # debug only
                     payload = res[1]
                     packet = bytes(routing, "ascii") + b_read  # byte string
@@ -378,27 +377,24 @@ class Ygate:
                     else:
                         message = f"{packet}"[2:-5]  # no b' and \r\n
                         # print(f'{Color.PURPLE}{message}{Color.END}')  # debug only
-                        err = ""
                         try:
                             self.sck.sendall(packet)
                             print(f"{localtime} {message}")
                             message = ""
                         except (TimeoutError, BrokenPipeError, OSError):
-                            err = "No network/internet"
-                        if len(err) > 0:  # try to reconnect
                             if self.aprs_con:
                                 self.sck.sendall(packet)
                                 print(f"{localtime} {message}")
                                 message = ""
                             else:
-                                message = f"{err}, not gated"
+                                message = "No network/internet, not gated"
 
                     if len(message) > 0:
                         print(
                             f"{localtime} {Color.YELLOW}{message}: "
                             + f"{packet}"[2:-5]
                             + Color.END
-                            )
+                        )
 
 
 if __name__ == "__main__":
