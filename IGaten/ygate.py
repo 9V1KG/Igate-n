@@ -406,7 +406,7 @@ class Ygate:
                             + f"{packet}"[2:-5]
                             + Color.END
                         )
-                elif len(res[1]) > 0
+                elif len(res[1]) > 0:
                     print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
                 else:  # just \n\r disregard
                     pass
