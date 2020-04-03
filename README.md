@@ -37,15 +37,14 @@ Please modify the following parameter in `ygaten.py` the according to your requi
              (not tested).
      BCNTXT: Text of the beacon. The beacon will be sent every 
      BEACON: seconds
-     HOST:   and 
-     PORT:   APRS server, usually do not need to be changed.
+     BLNTXT: Bulletin text, sent hourly
 ## Radio Setup FTM-400
-    Setup -> APRS -> 5 APRS Modem -> ON
-    Setup -> DATA -> 1 COM PORT SETTINGS
+    Setup -> APRS -> (5) APRS Modem -> ON
+    Setup -> DATA -> (1) COM PORT SETTINGS
         SPEED     -> 9600 bps
         OUTPUT    -> PACKET
         WP FORMAT -> NMEA 9
-    Setup -> DATA -> 3 DATA SPEED
+    Setup -> DATA -> (3) DATA SPEED
         APRS 1200 bps
         DATA 9600 bps
 
