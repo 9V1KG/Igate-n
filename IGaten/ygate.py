@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-04-03
+# Version 2020-04-04
 #
 
 
@@ -118,11 +118,8 @@ def is_routing(p_str) -> bool:
     :return: true if valid
     """
     # check for valid call sign at the beginning of the string
-    m = re.match(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}",p_str)
-    if m:
-        return True
-    else:
-        return False
+    m = re.match(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
+    return True if m else False
 
 
 def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
@@ -334,8 +331,9 @@ class Ygate:
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.host}")
             if self.aprs_con:
-                self.send_my_position()
                 self.send_bulletin()
+                time.sleep(5.)  # wait 5 sec before sending beacon
+                self.send_my_position()
                 return
             else:
                 print(
@@ -359,21 +357,22 @@ class Ygate:
         while True:
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
-            # check validity, routing should start with a call sign
             if res[0] > 0:
-                print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
+                localtime = time.strftime("%H:%M:%S")
+                print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
             else:
                 if is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
+
                     # starts with a call sign and contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
-                    routing = res[1]
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
+                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", res[1]
                     )  # replace "[...]<...>" with ",qAR,Call:"
-                    b_read = self.ser.read_until()  # payload
+                    b_read = self.ser.read_until()  # next line is payload
                     res = decode_ascii(b_read)
-                    payload = res[1]
+                    payload = res[1]  # non ascii chars will be passed as they are
                     packet = bytes(routing, "ascii") + b_read  # byte string
+
                     if len(payload) == 0:
                         message = "No Payload, not gated"
                     elif re.search(r",TCP", routing):

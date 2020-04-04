@@ -15,6 +15,23 @@ class TestFunctions(TestCase):
     def setUp(self) -> None:
         junk = 1
 
+    def test_is_routing(self):
+        self.assertEqual(IGaten.is_routing("DK4TB>APW10"), True)
+        self.assertEqual(IGaten.is_routing("^%4DK4TB=9U"), False)
+        self.assertEqual(IGaten.is_routing("E2X"), True)
+        self.assertEqual(IGaten.is_routing(" E2X"), False)
+
+    def test_decode_ascii(self):
+        print("Test decode_ascii:")
+        b_str = b'test byte string with 2\xb0 invalid\xff chars'
+        r_str = IGaten.decode_ascii(b_str)
+        self.assertEqual(r_str[0], 2)
+        print(r_str[1])
+        b_str = b'test byte string with all valid ASCII chars'
+        r_str = IGaten.decode_ascii(b_str)
+        print(r_str[1])
+        self.assertEqual(r_str[0], 0)
+
     def test_b91(self):
         # 0 bits set
         self.assertEqual(IGaten.b91(0), "!!!!")
