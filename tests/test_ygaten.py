@@ -52,6 +52,15 @@ class TestYGate(TestCase):
             "11955.07W/01478.09S#",
         )
 
+    @patch("IGaten.Ygate.is_routing")
+    def test_is_routing(self, mock_is_routing):
+        mock_is_routing.return_value = True
+        self.assertEqual(self.lcl_ygate.is_routing("DK4TB>APW10"), True)
+        self.assertEqual(self.lcl_ygate.is_routing("E2X"), True)
+        mock_is_routing.return_value = False
+        self.assertEqual(self.lcl_ygate.is_routing(" E2X"), False)
+        self.assertEqual(self.lcl_ygate.is_routing("^%4DK4TB=9U"), False)
+
     def test_aprs_conn(self):
         with patch(
             "IGaten.Ygate.aprs_con", new_callable=PropertyMock

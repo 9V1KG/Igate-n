@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-04-04
+# Version 2020-04-05
 #
 
 
@@ -34,8 +34,7 @@ def format_position(lon: tuple, lat: tuple) -> str:
     symbol = "/#"  # Gateway symbol
     lon = "{:03d}".format(lon[0]) + "{:05.2f}".format(lon[1]) + lon[2]
     lat = "{:02d}".format(lat[0]) + "{:05.2f}".format(lat[1]) + lat[2]
-    pos = f"{lat}{symbol[0]}{lon}{symbol[1]}"
-    return pos
+    return f"{lat}{symbol[0]}{lon}{symbol[1]}"
 
 
 def b91(r) -> str:
@@ -61,28 +60,23 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     :param alt: Tuple of altitude, unit "m' or "ft"
     :return: APRS compressed position string
     """
+    ld = lambda l1, l2: l1 + l2/60.
     symbol = "/#"  # Gateway symbol
-    lat_dec = lat[0] + lat[1] / 60.0
-    if "S" in lat[2]:
-        lat_dec *= -1
-    lon_dec = lon[0] + lon[1] / 60.0
-    if "W" in lon[2]:
-        lon_dec *= -1
-    lstr = symbol[0]  # symbol table id
 
+    lat_dec = -ld(lat[0], lat[1]) if "S" in lat[2] else ld(lat[0], lat[1])
+    lon_dec = -ld(lon[0], lon[1]) if "W" in lat[2] else ld(lon[0], lon[1])
+
+    lstr = symbol[0]  # symbol table id
     r = int(380926 * (90.0 - lat_dec))
     lstr += b91(r)  # Compressed Latitude XXXX
-
     r = int(190463 * (180.0 + lon_dec))
     lstr += b91(r)  # Compressed Longitude YYYY
     lstr += symbol[1]  # station symbol
 
-    hf = alt[0]  # Altitude
-    if alt[1] == "m":
-        hf /= 0.3048  # calculate feet
-    if hf == 0.0:
+    if alt[0] == 0.:
         lstr += "   "  # no altitude data
     else:  # csT bytes
+        hf = alt[0]/0.3048 if "m" in alt[1] else alt[0]
         a = int(math.log(hf) / math.log(1.002))
         lstr += chr(33 + int(a / 91)) + chr(33 + int(a % 91))
         lstr += chr(33 + int("00110010", 2) + 33)  # comp type altitude
@@ -109,17 +103,6 @@ def decode_ascii(bstr) -> tuple:
                 + Color.END
             bstr = bstr[msg.end:]
     return nb, pl
-
-
-def is_routing(p_str) -> bool:
-    """
-    Check whether p_str is a valid routing packet
-    :param p_str: String to be checked
-    :return: true if valid
-    """
-    # check for valid call sign at the beginning of the string
-    m = re.match(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
-    return True if m else False
 
 
 def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
@@ -165,14 +148,14 @@ class Ygate:
     def __init__(
         self,
         USER = "MYCALL-10",
-        PASS = "00000",
-        LAT = (14, 5.09, "N"),
-        LON = (119, 58.07, "E"),
-        ALT = (0.0, "m"),
-        SERIAL = "/dev/ttyUSB0",
-        BCNTXT = "IGate RF-IS 144.39 - 73",
-        BEACON = 900.0,
-        BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
+        PASS= "00000",
+        LAT= (14, 5.09, "N"),
+        LON= (119, 58.07, "E"),
+        ALT= (0.0, "m"),
+        SERIAL= "/dev/ttyUSB0",
+        BCNTXT= "IGate RF-IS 144.39 - 73",
+        BEACON= 900.0,
+        BLNTXT= "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -203,11 +186,38 @@ class Ygate:
         self.ser = None
         self.sck = None
 
+        # todo logging for statistics
+        self.call_signs = []  # List of unique calls heard
+        self.p_gated = 0  # number of gated packets
+        self.p_not_gated = 0  # number of not gated packets
+        self.p_inv_routing = 0  # number of invalid routing
+
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
         print("\r\nCtrl+C, exiting.")
+        print(
+            "{:d}".format(self.p_gated + self.p_not_gated) + " packets received, "
+            + f"{self.p_not_gated} Packets gated"
+        )
+        print("List of unique call sign heard:")
+        print(self.call_signs)
         self.ser.close()
         os._exit(0)
+
+    def is_routing(self, p_str: str) -> bool:
+        """
+        Check whether p_str is a valid routing packet, add unique call signs to list
+        :param p_str: String to be checked
+        :return: true if valid
+        """
+        m = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
+        if m and m.pos == 0:
+            if m.group() not in self.call_signs:
+                # todo to become part of logging
+                self.call_signs.append(m.group())
+            return True
+        else:
+            return False
 
     @property
     def aprs_con(self) -> bool:
@@ -250,7 +260,6 @@ class Ygate:
             )
             exit(0)
 
-    # todo Add Logging
     def send_aprs(self, aprs_string: str) -> bool:
         """
         Send aprs data to APRS-IS, used for beacon and bulletin
@@ -361,7 +370,7 @@ class Ygate:
                 localtime = time.strftime("%H:%M:%S")
                 print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
             else:
-                if is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
+                if self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
 
                     # starts with a call sign and contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
@@ -372,7 +381,7 @@ class Ygate:
                     res = decode_ascii(b_read)
                     payload = res[1]  # non ascii chars will be passed as they are
                     packet = bytes(routing, "ascii") + b_read  # byte string
-
+                    # todo Add Logging
                     if len(payload) == 0:
                         message = "No Payload, not gated"
                     elif re.search(r",TCP", routing):
@@ -390,23 +399,28 @@ class Ygate:
                         try:
                             self.sck.sendall(packet)
                             print(f"{localtime} {message}")
+                            self.p_gated += 1
                             message = ""
                         except (TimeoutError, BrokenPipeError, OSError):
                             if self.aprs_con:
                                 self.sck.sendall(packet)
                                 print(f"{localtime} {message}")
+                                self.p_gated += 1
                                 message = ""
                             else:
                                 message = "No network/internet, not gated"
 
                     if len(message) > 0:
+                        self.p_not_gated += 1
                         print(
                             f"{localtime} {Color.YELLOW}{message}: "
                             + f"{packet}"[2:-5]
                             + Color.END
                         )
                 elif len(res[1]) > 0:
-                    print(" " * 9 + f"{Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
+                    localtime = time.strftime("%H:%M:%S")
+                    self.p_inv_routing += 1
+                    print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
                 else:  # just \n\r disregard
                     pass
 
