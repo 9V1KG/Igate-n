@@ -311,8 +311,9 @@ class Ygate:
             td = datetime.datetime.now() - self.start_datetime
             p_tot = self.p_gated + self.p_not_gated + self.p_inv_routing
             n_calls = len(self.call_signs)
-            self.bulletin_txt = f"IGate is up for {str(td).split('.')[0]} - " \
-                f"{p_tot} packets received, {self.p_gated} packets gated. " \
+            self.bulletin_txt = f"IGate is up for {td.days} days," \
+                f" {round(td.seconds/3600,1)} h - " \
+                f"{p_tot} received {self.p_gated}, gated packets. " \
                 f"{n_calls} unique call signs heard."
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()

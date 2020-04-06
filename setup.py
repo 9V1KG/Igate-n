@@ -4,7 +4,7 @@ requirements = "pyserial", "requests", "black", "pylint"
 setup(
     name="Igate-n",
     version="0.0a",
-    packages=["tests", "IGaten"],
+    packages=["tests", "Ygate"],
     url="https://github.com/9V1KG/Igate-n",
     license="Please check with author",
     author="9V1KG",

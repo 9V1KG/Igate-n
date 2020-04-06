@@ -16,7 +16,7 @@ import sys
 dev_path=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, dev_path)
 print("Python path is now {}".format(sys.path))
-from IGaten import Color, ygate
+from Ygate import Color, ygate
 # -- Project information -----------------------------------------------------
 
 project = 'YGate'
