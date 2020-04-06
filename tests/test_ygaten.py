@@ -8,9 +8,8 @@ methods, it is difficult to make these tests more useful.
 """
 from unittest import TestCase
 from unittest.mock import patch, PropertyMock
-
-from IGaten.ygate import Ygate
 import IGaten
+from IGaten.ygate import Ygate
 
 
 class TestYGate(TestCase):

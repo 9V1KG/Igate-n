@@ -18,6 +18,7 @@ import re
 import signal
 import socket
 import threading
+import datetime
 import time
 import serial
 import requests
@@ -187,6 +188,7 @@ class Ygate:
         self.sck = None
 
         # todo logging for statistics
+        self.start_datetime = datetime.datetime.now()
         self.call_signs = []  # List of unique calls heard
         self.p_gated = 0  # number of gated packets
         self.p_not_gated = 0  # number of not gated packets
@@ -197,6 +199,7 @@ class Ygate:
         print("\r\nCtrl+C, exiting.")
         print(
             "{:d}".format(self.p_gated + self.p_not_gated) + " packets received, "
+            + f"{self.p_gated} Packets gated"
             + f"{self.p_not_gated} Packets gated"
         )
         print("List of unique call sign heard:")
@@ -301,8 +304,16 @@ class Ygate:
 
     def send_bulletin(self):
         """
-        thread that sends bulletin every HOURLY sec to APRS IS
+        thread that sends a bulletin every HOURLY sec to APRS IS
         """
+        if self.p_gated > 0:
+            # send statistics via bulletin
+            td = datetime.datetime.now() - self.start_datetime
+            p_tot = self.p_gated + self.p_not_gated + self.p_inv_routing
+            n_calls = len(self.call_signs)
+            self.bulletin_txt = f"IGate is up for {str(td).split('.')[0]} - " \
+                f"{p_tot} packets received, {self.p_gated} packets gated. " \
+                f"{n_calls} unique call signs heard."
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
@@ -330,9 +341,9 @@ class Ygate:
         Check that internet and serial are available, if yes, send beacon & bulletin
         :return:
         """
-        loc_date = time.strftime("%y-%m-%d")
         print(
-            f"{Color.GREEN}{loc_date} {self.user} IGgate started - Program by 9V1KG{Color.END}"
+            f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
+            f"IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos_f}")
         loc_time = time.strftime("%H:%M:%S")
