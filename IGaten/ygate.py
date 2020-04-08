@@ -144,18 +144,27 @@ class Color:
 
 
 class Ygate:
+
     HOURLY = 3600.0
+    FORMAT = "ascii"
+    """
+    todo: implement message count MSG_CNT and loc count LOC_CNT to 
+    respond to an ?IGATE? query. Ensure generic queries data type ?
+    not gated!
+    """
+    MSG_CNT = 0  # messages transmitted
+    LOC_CNT = 0  # number of local stns
 
     def __init__(
         self,
         USER = "MYCALL-10",
-        PASS= "00000",
+        PASS= "0000",
         LAT= (14, 5.09, "N"),
         LON= (119, 58.07, "E"),
         ALT= (0.0, "m"),
         SERIAL= "/dev/ttyUSB0",
         BCNTXT= "IGate RF-IS 144.39 - 73",
-        BEACON= 900.0,
+        BEACON= 1200.0,
         BLNTXT= "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
@@ -186,6 +195,7 @@ class Ygate:
         self.pos_c = compress_position(self.lon, self.lat, self.alt)
         self.ser = None
         self.sck = None
+        self.sock_file = None
 
         # todo logging for statistics
         self.start_datetime = datetime.datetime.now()
@@ -198,9 +208,11 @@ class Ygate:
     def signal_handler(self, interupt_signal, frame):
         print("\r\nCtrl+C, exiting.")
         print(
-            "{:d}".format(self.p_gated + self.p_not_gated) + " packets received, "
-            + f"{self.p_gated} Packets gated"
-            + f"{self.p_not_gated} Packets gated"
+            "{:d}".format(self.p_gated + self.p_not_gated + self.p_inv_routing) + " packets received, "
+            + f"{self.p_gated} Packets gated "
+              f"{self.p_not_gated} Packets not gated, "
+              f"{self.p_inv_routing} invalid packets."
+
         )
         print("List of unique call sign heard:")
         print(self.call_signs)
@@ -241,16 +253,17 @@ class Ygate:
             return False
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sck.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512)  # buffer size
-        sock_file = self.sck.makefile(mode="r", buffering=512)
+        self.sock_file = self.sck.makefile(mode="r")
         time.sleep(1.0)
         # Login to APRS Server
         self.sck.sendall(
-            bytes(f"user {self.user} pass {self.secret} vers ygate-n 0.5\n", "ascii")
+            bytes(f"user {self.user} pass {self.secret} -1 vers ygate-n 0.9 "
+                  f"filter m/150\n", self.FORMAT)
         )
-        login = sock_file.readline().strip()  # 1st response line
+        login = self.sock_file.readline().strip()  # 1st response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         # if second line contains "unverified", login was not successful
-        login = sock_file.readline().strip()  # 2nd response line
+        login = self.sock_file.readline().strip()  # 2nd response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
@@ -272,7 +285,7 @@ class Ygate:
         l_time = time.strftime("%H:%M:%S")
         try:
             if is_internet():
-                self.sck.sendall(bytes(aprs_string, "ascii"))
+                self.sck.sendall(bytes(aprs_string, self.FORMAT))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
@@ -285,7 +298,7 @@ class Ygate:
             )
             time.sleep(2.0)
             if self.aprs_con:
-                self.sck.sendall(bytes(aprs_string, "ascii"))
+                self.sck.sendall(bytes(aprs_string, self.FORMAT))
                 print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
@@ -313,11 +326,21 @@ class Ygate:
             n_calls = len(self.call_signs)
             self.bulletin_txt = f"IGate is up for {td.days} days," \
                 f" {round(td.seconds/3600,1)} h - " \
-                f"{p_tot} received {self.p_gated}, gated packets. " \
-                f"{n_calls} unique call signs heard."
+                f"{p_tot} received, {self.p_gated} gated packets. " \
+                f"{n_calls} unique calls."
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
+
+    def aprsis_rx(self):
+        try:  # receive from APRS-IS test function
+            rcvd = self.sock_file.readline().strip()
+            if len(rcvd) > 0 and rcvd.find("# aprs") == -1:
+                print(rcvd)
+            time.sleep(0.2)
+        except UnicodeDecodeError:
+            pass
+
 
     def open_serial(self):
         """
@@ -376,14 +399,15 @@ class Ygate:
         self.startup()
 
         while True:
+            self.aprsis_rx()  # test only
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
             if res[0] > 0:
                 localtime = time.strftime("%H:%M:%S")
                 print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
+                self.p_inv_routing += 1
             else:
                 if self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
-
                     # starts with a call sign and contains " [date time] <UI *>"
                     localtime = time.strftime("%H:%M:%S")
                     routing = re.sub(
@@ -392,16 +416,16 @@ class Ygate:
                     b_read = self.ser.read_until()  # next line is payload
                     res = decode_ascii(b_read)
                     payload = res[1]  # non ascii chars will be passed as they are
-                    packet = bytes(routing, "ascii") + b_read  # byte string
+                    packet = bytes(routing, self.FORMAT) + b_read  # byte string
                     # todo Add Logging
                     if len(payload) == 0:
                         message = "No Payload, not gated"
                     elif re.search(r",TCP", routing):
                         # drop packets sourced from internet
-                        message = "Internet packet not gated"
+                        message = "TCP not gated"
                     elif re.search(r"^}.*,TCP.*:", payload):
                         # drop packets sourced from internet in third party packets
-                        message = "Internet packet not gated"
+                        message = "TCP not gated"
                     elif "RFONLY" in routing:
                         message = "RFONLY, not gated"
                     elif "NOGATE" in routing:
@@ -429,6 +453,7 @@ class Ygate:
                             + f"{packet}"[2:-5]
                             + Color.END
                         )
+
                 elif len(res[1]) > 0:
                     localtime = time.strftime("%H:%M:%S")
                     self.p_inv_routing += 1
