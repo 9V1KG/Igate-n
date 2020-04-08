@@ -142,6 +142,25 @@ class Color:
     UNDERLINE = "\033[4;37;48m"
     END = "\033[1;37;0m"
 
+# todo classify/decode received pauload
+aprs_type = {
+    "::": "message, bulletin",
+    ":;": "object",
+    ":=": "pos no timestamp, with msg",
+    ":!": "pos no timestamp, no msg",
+    ":/": "pos with timestamp, no msg",
+    ":@": "pos with timestamp, with msg",
+    ":$": "NMEA position report",
+    ":)": "item",
+    ":}": "third party",
+    ":`": "Current GPS data (MICE)",
+    ":'": "Old/current GPS data (MICE)",
+    ":?": "query",
+    ":>": "status report",
+    ":<": "stn capabilities"
+    ":T": "telemetry"
+}
+
 
 class Ygate:
 
@@ -203,6 +222,8 @@ class Ygate:
         self.p_gated = 0  # number of gated packets
         self.p_not_gated = 0  # number of not gated packets
         self.p_inv_routing = 0  # number of invalid routing
+
+        self.msg = ""  # Status message for gating
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -267,7 +288,8 @@ class Ygate:
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
-        elif login.find("# aprsc") >= 0 and login.find("unverified") == -1:
+        elif (login.find("# aprsc") >= 0 or login.find("# jav") >= 0) \
+                and login.find("unverified") == -1:
             # aprs server sends every 20 sec one comment line (#) when logged in
             return True
         else:
@@ -324,10 +346,10 @@ class Ygate:
             td = datetime.datetime.now() - self.start_datetime
             p_tot = self.p_gated + self.p_not_gated + self.p_inv_routing
             n_calls = len(self.call_signs)
-            self.bulletin_txt = f"IGate is up for {td.days} days," \
+            self.bulletin_txt = f"IGate up {td.days} days " \
                 f" {round(td.seconds/3600,1)} h - " \
-                f"{p_tot} received, {self.p_gated} gated packets. " \
-                f"{n_calls} unique calls."
+                f"{p_tot} rcvd, {self.p_gated}, " \
+                f"{n_calls} unique calls"
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
@@ -336,11 +358,57 @@ class Ygate:
         try:  # receive from APRS-IS test function
             rcvd = self.sock_file.readline().strip()
             if len(rcvd) > 0 and rcvd.find("# aprs") == -1:
-                print(rcvd)
+                print(" " * 9 + f"{rcvd}")
             time.sleep(0.2)
         except UnicodeDecodeError:
             pass
 
+    def check_routing(self, p_str: tuple) -> bool:
+        """
+        Check whether the packet should be routed to the internet
+        :param p_str: (routing, payload)
+        :return: true if ok for routing
+        """
+        if len(p_str[0]) == 0:
+            self.msg = "No Payload, not gated"
+        elif re.search(r",TCP", p_str[0]):
+            # drop packets sourced from internet
+            self.msg = "TCP not gated"
+        elif re.search(r"^}.*,TCP.*:", p_str[1]):
+            # drop packets sourced from internet in third party packets
+            self.msg = "TCP not gated"
+        elif re.match(r"\?", p_str[1]):
+            # drop aprs queries
+            self.msg = "Query, not gated"
+        elif "RFONLY" in p_str[0]:
+            self.msg = "RFONLY, not gated"
+        elif "NOGATE" in p_str[0]:
+            self.msg = "NOGATE, not gated"
+        else:
+            return True
+        return False
+
+    def do_gating(self, packet: bytes) -> bool:
+        """
+        gate packet to aprs server
+        :param packet:
+        :return:
+        """
+        try:
+            self.sck.sendall(packet)
+            self.p_gated += 1
+            self.msg = ""
+            return True
+        except (TimeoutError, BrokenPipeError, OSError):
+            if self.aprs_con:
+                self.sck.sendall(packet)
+                self.p_gated += 1
+                self.msg = ""
+                return True
+            else:
+                self.msg = "No network/internet, not gated"
+                self.p_not_gated += 1
+                return False
 
     def open_serial(self):
         """
@@ -402,64 +470,44 @@ class Ygate:
             self.aprsis_rx()  # test only
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
-            if res[0] > 0:
+            if res[0] > 0:  # invalid ascii char in routing
                 localtime = time.strftime("%H:%M:%S")
                 print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
                 self.p_inv_routing += 1
-            else:
-                if self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
-                    # starts with a call sign and contains " [date time] <UI *>"
-                    localtime = time.strftime("%H:%M:%S")
+            elif self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
+                # routing starts with a call sign and contains " [date time] <UI *>"
+                localtime = time.strftime("%H:%M:%S")
+                routing = res[1]
+                b_read = self.ser.read_until()  # next line is payload
+                res = decode_ascii(b_read)
+                payload = res[1]  # non ascii chars will be passed as they are
+
+                if self.check_routing((routing, payload)):
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", res[1]
+                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
-                    b_read = self.ser.read_until()  # next line is payload
-                    res = decode_ascii(b_read)
-                    payload = res[1]  # non ascii chars will be passed as they are
                     packet = bytes(routing, self.FORMAT) + b_read  # byte string
-                    # todo Add Logging
-                    if len(payload) == 0:
-                        message = "No Payload, not gated"
-                    elif re.search(r",TCP", routing):
-                        # drop packets sourced from internet
-                        message = "TCP not gated"
-                    elif re.search(r"^}.*,TCP.*:", payload):
-                        # drop packets sourced from internet in third party packets
-                        message = "TCP not gated"
-                    elif "RFONLY" in routing:
-                        message = "RFONLY, not gated"
-                    elif "NOGATE" in routing:
-                        message = "NOGATE, not gated"
-                    else:
-                        message = routing + payload
-                        try:
-                            self.sck.sendall(packet)
-                            print(f"{localtime} {message}")
-                            self.p_gated += 1
-                            message = ""
-                        except (TimeoutError, BrokenPipeError, OSError):
-                            if self.aprs_con:
-                                self.sck.sendall(packet)
-                                print(f"{localtime} {message}")
-                                self.p_gated += 1
-                                message = ""
-                            else:
-                                message = "No network/internet, not gated"
-
-                    if len(message) > 0:
-                        self.p_not_gated += 1
+                    if self.do_gating(packet):
                         print(
-                            f"{localtime} {Color.YELLOW}{message}: "
-                            + f"{packet}"[2:-5]
-                            + Color.END
+                            f"{localtime} {routing}{payload}"
                         )
-
-                elif len(res[1]) > 0:
-                    localtime = time.strftime("%H:%M:%S")
-                    self.p_inv_routing += 1
-                    print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
-                else:  # just \n\r disregard
-                    pass
+                    else:
+                        routing = re.sub(r" \[.*\] <UI.*>:", "", routing)
+                        print(
+                            f"{localtime} {Color.YELLOW}{self.msg}{Color.END}: "
+                            f"{routing}{payload}"
+                        )
+                else:
+                    print(
+                        f"{localtime} {Color.YELLOW}{self.msg}{Color.END}: "
+                        f"{routing}{payload}"
+                    )
+            elif len(res[1]) > 0:
+                localtime = time.strftime("%H:%M:%S")
+                print(f"{localtime} {Color.YELLOW}Invalid routing{Color.END} {res[1]}")
+                self.p_inv_routing += 1
+            else:  # just \n\r disregard
+                pass
 
 
 if __name__ == "__main__":
