@@ -64,7 +64,7 @@ Sure, we need to write a custom code to call it. This is one of the reasons it i
 So to call it using say DU3TW IGaten machine it would be
 
 ```python
-from IGaten import YGate, Color
+from Ygate import YGate, Color
 ygate = Ygate def __init__(
         self,
         HOST="rotate.aprs2.net.co.uk",

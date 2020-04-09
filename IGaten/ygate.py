@@ -61,17 +61,16 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     :param alt: Tuple of altitude, unit "m' or "ft"
     :return: APRS compressed position string
     """
-    ld = lambda l1, l2: l1 + l2/60.
     symbol = "/#"  # Gateway symbol
-
-    lat_dec = -ld(lat[0], lat[1]) if "S" in lat[2] else ld(lat[0], lat[1])
-    lon_dec = -ld(lon[0], lon[1]) if "W" in lat[2] else ld(lon[0], lon[1])
-
     lstr = symbol[0]  # symbol table id
+
+    lat_dec = -(lat[0] + lat[1]/60.) if "S" in lat[2] else (lat[0] + lat[1]/60.)
+    lon_dec = -(lon[0] + lon[1]/60.) if "W" in lat[2] else (lon[0] + lon[1]/60.)
     r = int(380926 * (90.0 - lat_dec))
     lstr += b91(r)  # Compressed Latitude XXXX
     r = int(190463 * (180.0 + lon_dec))
     lstr += b91(r)  # Compressed Longitude YYYY
+
     lstr += symbol[1]  # station symbol
 
     if alt[0] == 0.:
@@ -142,20 +141,53 @@ class Color:
     UNDERLINE = "\033[4;37;48m"
     END = "\033[1;37;0m"
 
+# classify/decode received payload
+aprs_data_type = {
+    ":": "MSG ",
+    ";": "OBJ ",
+    "=": "POS ",
+    "!": "POS ",
+    "/": "POST",
+    "@": "POST",
+    "$": "NMEA",
+    ")": "ITEM",
+    "}": "3PRT",
+    "`": "GPS ",
+    "'": "GPS ",
+    "?": "QURY",
+    ">": "STAT",
+    "<": "CAP ",
+    "T": "TEL ",
+    "#": "WX  ",
+    "*": "WX  ",
+    ",": "TEST",
+    "_": "WX  ",
+    "{": "USER",
+}
+
 
 class Ygate:
+
     HOURLY = 3600.0
+    FORMAT = "ascii"
+    """
+    todo: implement message count MSG_CNT and loc count LOC_CNT to 
+    respond to an ?IGATE? query. Ensure generic queries data type ?
+    not gated!
+    """
+    MSG_CNT = 0  # messages transmitted
+    LOC_CNT = 0  # number of local stns
 
     def __init__(
         self,
         USER = "MYCALL-10",
-        PASS= "00000",
+        PASS= "0000",
         LAT= (14, 5.09, "N"),
         LON= (119, 58.07, "E"),
         ALT= (0.0, "m"),
         SERIAL= "/dev/ttyUSB0",
         BCNTXT= "IGate RF-IS 144.39 - 73",
-        BEACON= 900.0,
+        BEACON= 1200.0,
         BLNTXT= "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
@@ -186,21 +218,25 @@ class Ygate:
         self.pos_c = compress_position(self.lon, self.lat, self.alt)
         self.ser = None
         self.sck = None
+        self.sock_file = None
 
-        # todo logging for statistics
         self.start_datetime = datetime.datetime.now()
         self.call_signs = []  # List of unique calls heard
         self.p_gated = 0  # number of gated packets
         self.p_not_gated = 0  # number of not gated packets
         self.p_inv_routing = 0  # number of invalid routing
 
+        self.msg = ""  # Status message for gating
+
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
         print("\r\nCtrl+C, exiting.")
         print(
-            "{:d}".format(self.p_gated + self.p_not_gated) + " packets received, "
-            + f"{self.p_gated} Packets gated"
-            + f"{self.p_not_gated} Packets gated"
+            "{:d}".format(self.p_gated + self.p_not_gated + self.p_inv_routing) + " packets received, "
+            + f"{self.p_gated} Packets gated "
+              f"{self.p_not_gated} Packets not gated, "
+              f"{self.p_inv_routing} invalid packets."
+
         )
         print("List of unique call sign heard:")
         print(self.call_signs)
@@ -241,20 +277,23 @@ class Ygate:
             return False
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sck.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512)  # buffer size
-        sock_file = self.sck.makefile(mode="r", buffering=512)
+        self.sock_file = self.sck.makefile(mode="r")
+        login = self.sock_file.readline().strip()  # 1st response line
+        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         time.sleep(1.0)
         # Login to APRS Server
+        # todo: there is still a problem to login to javAPRSSrvr
         self.sck.sendall(
-            bytes(f"user {self.user} pass {self.secret} vers ygate-n 0.5\n", "ascii")
+            bytes(f"user {self.user} pass {self.secret} -1 vers ygate-n 0.9 "
+                  f"filter m/150\n", self.FORMAT)
         )
-        login = sock_file.readline().strip()  # 1st response line
-        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         # if second line contains "unverified", login was not successful
-        login = sock_file.readline().strip()  # 2nd response line
+        login = self.sock_file.readline().strip()  # 2nd response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
-        elif login.find("# aprsc") >= 0 and login.find("unverified") == -1:
+        elif (login.find("# aprsc") >= 0 or login.find("# jav") >= 0) \
+                and login.find("unverified") == -1:
             # aprs server sends every 20 sec one comment line (#) when logged in
             return True
         else:
@@ -272,8 +311,8 @@ class Ygate:
         l_time = time.strftime("%H:%M:%S")
         try:
             if is_internet():
-                self.sck.sendall(bytes(aprs_string, "ascii"))
-                print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                self.sck.sendall(bytes(aprs_string, self.FORMAT))
+                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 err = "No internet"
@@ -285,8 +324,8 @@ class Ygate:
             )
             time.sleep(2.0)
             if self.aprs_con:
-                self.sck.sendall(bytes(aprs_string, "ascii"))
-                print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                self.sck.sendall(bytes(aprs_string, self.FORMAT))
+                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 print(
@@ -311,12 +350,70 @@ class Ygate:
             td = datetime.datetime.now() - self.start_datetime
             p_tot = self.p_gated + self.p_not_gated + self.p_inv_routing
             n_calls = len(self.call_signs)
-            self.bulletin_txt = f"IGate is up for {str(td).split('.')[0]} - " \
-                f"{p_tot} packets received, {self.p_gated} packets gated. " \
-                f"{n_calls} unique call signs heard."
+            self.bulletin_txt = f"IGate up {td.days} days " \
+                f" {round(td.seconds/3600,1)} h - " \
+                f"{p_tot} rcvd, {self.p_gated} gtd, " \
+                f"{n_calls} unique calls"
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
+
+    def aprsis_rx(self):
+        try:  # receive from APRS-IS test function
+            rcvd = self.sock_file.readline().strip()
+            if len(rcvd) > 0 and rcvd.find("# aprs") == -1:
+                print(" " * 9 + f"{rcvd}")
+            time.sleep(0.2)
+        except UnicodeDecodeError:
+            pass
+
+    def check_routing(self, p_str: tuple) -> bool:
+        """
+        Check whether the packet should be routed to the internet
+        :param p_str: (routing, payload)
+        :return: true if ok for routing
+        """
+        if len(p_str[0]) == 0:
+            self.msg = "No Payload, not gated"
+        elif re.search(r",TCP", p_str[0]):
+            # drop packets sourced from internet
+            self.msg = "TCP not gated"
+        elif re.search(r"^}.*,TCP.*:", p_str[1]):
+            # drop packets sourced from internet in third party packets
+            self.msg = "TCP not gated"
+        elif re.match(r"\?", p_str[1]):
+            # drop aprs queries
+            self.msg = "Query, not gated"
+        elif "RFONLY" in p_str[0]:
+            self.msg = "RFONLY, not gated"
+        elif "NOGATE" in p_str[0]:
+            self.msg = "NOGATE, not gated"
+        else:
+            return True
+        self.p_not_gated += 1
+        return False
+
+    def do_gating(self, packet: bytes) -> bool:
+        """
+        gate packet to aprs server
+        :param packet:
+        :return:
+        """
+        try:
+            self.sck.sendall(packet)
+            self.p_gated += 1
+            self.msg = ""
+            return True
+        except (TimeoutError, BrokenPipeError, OSError):
+            if self.aprs_con:
+                self.sck.sendall(packet)
+                self.p_gated += 1
+                self.msg = ""
+                return True
+            else:
+                self.msg = "No network/internet, not gated"
+                self.p_not_gated += 1
+                return False
 
     def open_serial(self):
         """
@@ -375,65 +472,51 @@ class Ygate:
         self.startup()
 
         while True:
+            # self.aprsis_rx()  # test only
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
-            if res[0] > 0:
+            if res[0] > 0:  # invalid ascii char in routing
                 localtime = time.strftime("%H:%M:%S")
                 print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
-            else:
-                if self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
-
-                    # starts with a call sign and contains " [date time] <UI *>"
-                    localtime = time.strftime("%H:%M:%S")
+                self.p_inv_routing += 1
+            elif self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
+                # routing starts with a call sign and contains " [date time] <UI *>"
+                localtime = time.strftime("%H:%M:%S")
+                routing = res[1]
+                b_read = self.ser.read_until()  # next line is payload
+                res = decode_ascii(b_read)
+                payload = res[1]  # non ascii chars will be passed as they are
+                try:
+                    data_type = aprs_data_type[payload[0]]
+                except KeyError:
+                    data_type = "    "
+                if self.check_routing((routing, payload)):
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", res[1]
+                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
-                    b_read = self.ser.read_until()  # next line is payload
-                    res = decode_ascii(b_read)
-                    payload = res[1]  # non ascii chars will be passed as they are
-                    packet = bytes(routing, "ascii") + b_read  # byte string
-                    # todo Add Logging
-                    if len(payload) == 0:
-                        message = "No Payload, not gated"
-                    elif re.search(r",TCP", routing):
-                        # drop packets sourced from internet
-                        message = "Internet packet not gated"
-                    elif re.search(r"^}.*,TCP.*:", payload):
-                        # drop packets sourced from internet in third party packets
-                        message = "Internet packet not gated"
-                    elif "RFONLY" in routing:
-                        message = "RFONLY, not gated"
-                    elif "NOGATE" in routing:
-                        message = "NOGATE, not gated"
-                    else:
-                        message = routing + payload
-                        try:
-                            self.sck.sendall(packet)
-                            print(f"{localtime} {message}")
-                            self.p_gated += 1
-                            message = ""
-                        except (TimeoutError, BrokenPipeError, OSError):
-                            if self.aprs_con:
-                                self.sck.sendall(packet)
-                                print(f"{localtime} {message}")
-                                self.p_gated += 1
-                                message = ""
-                            else:
-                                message = "No network/internet, not gated"
-
-                    if len(message) > 0:
-                        self.p_not_gated += 1
+                    packet = bytes(routing, self.FORMAT) + b_read  # byte string
+                    if self.do_gating(packet):
                         print(
-                            f"{localtime} {Color.YELLOW}{message}: "
-                            + f"{packet}"[2:-5]
-                            + Color.END
+                            f"{localtime} [{data_type}] {routing}{payload}"
                         )
-                elif len(res[1]) > 0:
-                    localtime = time.strftime("%H:%M:%S")
-                    self.p_inv_routing += 1
-                    print(f"{localtime} {Color.YELLOW}Invalid routing:{Color.END} {res[1]}")
-                else:  # just \n\r disregard
-                    pass
+                    else:
+                        routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                        print(
+                            f"{localtime} {Color.YELLOW}{self.msg}{Color.END}: "
+                            f"{routing}{payload}"
+                        )
+                else:
+                    routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                    print(
+                        f"{localtime} [{data_type}] {Color.YELLOW}{self.msg}{Color.END}: "
+                        f"{routing}{payload}"
+                    )
+            elif len(res[1]) > 0:
+                localtime = time.strftime("%H:%M:%S")
+                print(f"{localtime} {Color.YELLOW}Invalid routing{Color.END} {res[1]}")
+                self.p_inv_routing += 1
+            else:  # just \n\r disregard
+                pass
 
 
 if __name__ == "__main__":
