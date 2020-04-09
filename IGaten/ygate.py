@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-04-05
+# Version 2020-04-10
 #
 
 
@@ -141,14 +141,15 @@ class Color:
     UNDERLINE = "\033[4;37;48m"
     END = "\033[1;37;0m"
 
+
 # classify/decode received payload
 aprs_data_type = {
     ":": "MSG ",
     ";": "OBJ ",
     "=": "POS ",
     "!": "POS ",
-    "/": "POST",
-    "@": "POST",
+    "/": "POS ",
+    "@": "POS ",
     "$": "NMEA",
     ")": "ITEM",
     "}": "3PRT",
@@ -162,7 +163,7 @@ aprs_data_type = {
     "*": "WX  ",
     ",": "TEST",
     "_": "WX  ",
-    "{": "USER",
+    "{": "USER"
 }
 
 
@@ -170,25 +171,22 @@ class Ygate:
 
     HOURLY = 3600.0
     FORMAT = "ascii"
-    """
-    todo: implement message count MSG_CNT and loc count LOC_CNT to 
-    respond to an ?IGATE? query. Ensure generic queries data type ?
-    not gated!
-    """
+
+    # todo: answer to ?IGATE? query with MSG_CNT and LOC_CNT
     MSG_CNT = 0  # messages transmitted
     LOC_CNT = 0  # number of local stns
 
     def __init__(
         self,
-        USER = "MYCALL-10",
-        PASS= "0000",
-        LAT= (14, 5.09, "N"),
-        LON= (119, 58.07, "E"),
-        ALT= (0.0, "m"),
-        SERIAL= "/dev/ttyUSB0",
-        BCNTXT= "IGate RF-IS 144.39 - 73",
-        BEACON= 1200.0,
-        BLNTXT= "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
+        USER="MYCALL-10",
+        PASS="0000",
+        LAT=(14, 5.09, "N"),
+        LON=(119, 58.07, "E"),
+        ALT=(0.0, "m"),
+        SERIAL="/dev/ttyUSB0",
+        BCNTXT="IGate RF-IS 144.39 - 73",
+        BEACON=1200.0,
+        BLNTXT="IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -204,21 +202,17 @@ class Ygate:
 
         self.user = USER
         self.secret = PASS
-        self.lat = LAT
-        self.lon = LON
-        self.alt = ALT
-        self.serial = SERIAL
         self.beacon_txt = BCNTXT
         self.beacon_time = BEACON
         self.bulletin_txt = f"{USER} {BLNTXT}"  # Bulletin
 
         self.host = "rotate.aprs2.net"
         self.port = 14580
-        self.pos_f = format_position(self.lon, self.lat)
-        self.pos_c = compress_position(self.lon, self.lat, self.alt)
-        self.ser = None
+        self.pos_f = format_position(LON, LAT)
+        self.pos_c = compress_position(LON, LAT, ALT)
         self.sck = None
         self.sock_file = None
+        self.ser = None
 
         self.start_datetime = datetime.datetime.now()
         self.call_signs = []  # List of unique calls heard
@@ -226,7 +220,32 @@ class Ygate:
         self.p_not_gated = 0  # number of not gated packets
         self.p_inv_routing = 0  # number of invalid routing
 
-        self.msg = ""  # Status message for gating
+        self.msg = ""  # Status messages
+
+        print(
+            f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
+            f"IGgate started - Program by 9V1KG{Color.END}"
+        )
+        print(" " * 9 + f"Position: {self.pos_f}")
+        loc_time = time.strftime("%H:%M:%S")
+        self.open_serial(SERIAL)
+        if is_internet():  # check internet connection
+            print(f"{loc_time} Logging in to {self.host}")
+            if self.aprs_con:
+                self.send_bulletin()
+                time.sleep(5.)  # wait 5 sec before sending beacon
+                self.send_my_position()
+            else:
+                print(
+                    f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
+                )
+                self.ser.close()
+                exit(0)
+        else:
+            print(f"{loc_time} {Color.RED}No internet available{Color.END}")
+            self.ser.close()
+            exit(0)
+        signal.signal(signal.SIGINT, self.signal_handler)
 
     # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
@@ -272,24 +291,23 @@ class Ygate:
             self.sck.connect((self.host, self.port))
         except OSError as msg:
             print(
-                f"{l_time} {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
+                f"{l_time} [n/a ] {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
             )
             return False
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sck.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512)  # buffer size
         self.sock_file = self.sck.makefile(mode="r")
         login = self.sock_file.readline().strip()  # 1st response line
-        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
+        print(f"{l_time} {Color.GREEN}{login}{Color.END}")
         time.sleep(1.0)
         # Login to APRS Server
-        # todo: there is still a problem to login to javAPRSSrvr
         self.sck.sendall(
-            bytes(f"user {self.user} pass {self.secret} -1 vers ygate-n 0.9 "
-                  f"filter m/150\n", self.FORMAT)
+            bytes(f"user {self.user} pass {self.secret} "
+                  f"9V1KG-ygate 0.9 filter m/150\n\r", "utf-8")
         )
         # if second line contains "unverified", login was not successful
         login = self.sock_file.readline().strip()  # 2nd response line
-        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
+        print(f"{l_time} {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
         elif (login.find("# aprsc") >= 0 or login.find("# jav") >= 0) \
@@ -308,11 +326,12 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
+        dtid = "[MSG ]" if re.search(r"::BLN", aprs_string) else "[POS ]"
         l_time = time.strftime("%H:%M:%S")
         try:
             if is_internet():
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} {dtid} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 err = "No internet"
@@ -325,7 +344,7 @@ class Ygate:
             time.sleep(2.0)
             if self.aprs_con:
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} {dtid} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 print(
@@ -359,6 +378,10 @@ class Ygate:
         self.send_aprs(bulletin)
 
     def aprsis_rx(self):
+        """
+        Receives and prints packets from APRS server
+        :return:
+        """
         try:  # receive from APRS-IS test function
             rcvd = self.sock_file.readline().strip()
             if len(rcvd) > 0 and rcvd.find("# aprs") == -1:
@@ -415,15 +438,15 @@ class Ygate:
                 self.p_not_gated += 1
                 return False
 
-    def open_serial(self):
+    def open_serial(self, serial_dev):
         """
         Opens serial port with 9600 Bd
         :return: exit program when serial could not be opened
         """
         try:
             # open first usb serial port
-            self.ser = serial.Serial(self.serial, 9600)
-            return
+            self.ser = serial.Serial(serial_dev, 9600)
+            print(" " * 9 + f"Serial port {self.ser.name} opened")
         except Exception as err:
             print(
                 " " * 9
@@ -433,44 +456,11 @@ class Ygate:
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
 
-    def startup(self):
-        """
-        Check that internet and serial are available, if yes, send beacon & bulletin
-        :return:
-        """
-        print(
-            f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
-            f"IGgate started - Program by 9V1KG{Color.END}"
-        )
-        print(" " * 9 + f"Position: {self.pos_f}")
-        loc_time = time.strftime("%H:%M:%S")
-        self.open_serial()
-        if is_internet():  # check internet connection
-            print(f"{loc_time} Logging in to {self.host}")
-            if self.aprs_con:
-                self.send_bulletin()
-                time.sleep(5.)  # wait 5 sec before sending beacon
-                self.send_my_position()
-                return
-            else:
-                print(
-                    f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
-                )
-                self.ser.close()
-                exit(0)
-        else:
-            print(f"{loc_time} {Color.RED}No internet available{Color.END}")
-            self.ser.close()
-            exit(0)
-
     def start(self):
         """
         Starts Igate and runs in loop until terminated with Ctrl C
         :return: nil
         """
-        signal.signal(signal.SIGINT, self.signal_handler)
-        self.startup()
-
         while True:
             # self.aprsis_rx()  # test only
             b_read = self.ser.read_until()
