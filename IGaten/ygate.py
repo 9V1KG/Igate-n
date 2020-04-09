@@ -61,17 +61,16 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     :param alt: Tuple of altitude, unit "m' or "ft"
     :return: APRS compressed position string
     """
-    ld = lambda l1, l2: l1 + l2/60.
     symbol = "/#"  # Gateway symbol
-
-    lat_dec = -ld(lat[0], lat[1]) if "S" in lat[2] else ld(lat[0], lat[1])
-    lon_dec = -ld(lon[0], lon[1]) if "W" in lat[2] else ld(lon[0], lon[1])
-
     lstr = symbol[0]  # symbol table id
+
+    lat_dec = -(lat[0] + lat[1]/60.) if "S" in lat[2] else (lat[0] + lat[1]/60.)
+    lon_dec = -(lon[0] + lon[1]/60.) if "W" in lat[2] else (lon[0] + lon[1]/60.)
     r = int(380926 * (90.0 - lat_dec))
     lstr += b91(r)  # Compressed Latitude XXXX
     r = int(190463 * (180.0 + lon_dec))
     lstr += b91(r)  # Compressed Longitude YYYY
+
     lstr += symbol[1]  # station symbol
 
     if alt[0] == 0.:
@@ -142,23 +141,28 @@ class Color:
     UNDERLINE = "\033[4;37;48m"
     END = "\033[1;37;0m"
 
-# todo classify/decode received pauload
-aprs_type = {
-    "::": "message, bulletin",
-    ":;": "object",
-    ":=": "pos no timestamp, with msg",
-    ":!": "pos no timestamp, no msg",
-    ":/": "pos with timestamp, no msg",
-    ":@": "pos with timestamp, with msg",
-    ":$": "NMEA position report",
-    ":)": "item",
-    ":}": "third party",
-    ":`": "Current GPS data (MICE)",
-    ":'": "Old/current GPS data (MICE)",
-    ":?": "query",
-    ":>": "status report",
-    ":<": "stn capabilities"
-    ":T": "telemetry"
+# classify/decode received payload
+aprs_data_type = {
+    ":": "MSG ",
+    ";": "OBJ ",
+    "=": "POS ",
+    "!": "POS ",
+    "/": "POST",
+    "@": "POST",
+    "$": "NMEA",
+    ")": "ITEM",
+    "}": "3PRT",
+    "`": "GPS ",
+    "'": "GPS ",
+    "?": "QURY",
+    ">": "STAT",
+    "<": "CAP ",
+    "T": "TEL ",
+    "#": "WX  ",
+    "*": "WX  ",
+    ",": "TEST",
+    "_": "WX  ",
+    "{": "USER",
 }
 
 
@@ -216,7 +220,6 @@ class Ygate:
         self.sck = None
         self.sock_file = None
 
-        # todo logging for statistics
         self.start_datetime = datetime.datetime.now()
         self.call_signs = []  # List of unique calls heard
         self.p_gated = 0  # number of gated packets
@@ -275,14 +278,15 @@ class Ygate:
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sck.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512)  # buffer size
         self.sock_file = self.sck.makefile(mode="r")
+        login = self.sock_file.readline().strip()  # 1st response line
+        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         time.sleep(1.0)
         # Login to APRS Server
+        # todo: there is still a problem to login to javAPRSSrvr
         self.sck.sendall(
             bytes(f"user {self.user} pass {self.secret} -1 vers ygate-n 0.9 "
                   f"filter m/150\n", self.FORMAT)
         )
-        login = self.sock_file.readline().strip()  # 1st response line
-        print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
         # if second line contains "unverified", login was not successful
         login = self.sock_file.readline().strip()  # 2nd response line
         print(f"{l_time}  {Color.GREEN}{login}{Color.END}")
@@ -308,7 +312,7 @@ class Ygate:
         try:
             if is_internet():
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 err = "No internet"
@@ -321,7 +325,7 @@ class Ygate:
             time.sleep(2.0)
             if self.aprs_con:
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} [SELF] {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
             else:
                 print(
@@ -348,7 +352,7 @@ class Ygate:
             n_calls = len(self.call_signs)
             self.bulletin_txt = f"IGate up {td.days} days " \
                 f" {round(td.seconds/3600,1)} h - " \
-                f"{p_tot} rcvd, {self.p_gated}, " \
+                f"{p_tot} rcvd, {self.p_gated} gtd, " \
                 f"{n_calls} unique calls"
         bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
@@ -386,6 +390,7 @@ class Ygate:
             self.msg = "NOGATE, not gated"
         else:
             return True
+        self.p_not_gated += 1
         return False
 
     def do_gating(self, packet: bytes) -> bool:
@@ -467,7 +472,7 @@ class Ygate:
         self.startup()
 
         while True:
-            self.aprsis_rx()  # test only
+            # self.aprsis_rx()  # test only
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
             if res[0] > 0:  # invalid ascii char in routing
@@ -481,7 +486,10 @@ class Ygate:
                 b_read = self.ser.read_until()  # next line is payload
                 res = decode_ascii(b_read)
                 payload = res[1]  # non ascii chars will be passed as they are
-
+                try:
+                    data_type = aprs_data_type[payload[0]]
+                except KeyError:
+                    data_type = "    "
                 if self.check_routing((routing, payload)):
                     routing = re.sub(
                         r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
@@ -489,17 +497,18 @@ class Ygate:
                     packet = bytes(routing, self.FORMAT) + b_read  # byte string
                     if self.do_gating(packet):
                         print(
-                            f"{localtime} {routing}{payload}"
+                            f"{localtime} [{data_type}] {routing}{payload}"
                         )
                     else:
-                        routing = re.sub(r" \[.*\] <UI.*>:", "", routing)
+                        routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                         print(
                             f"{localtime} {Color.YELLOW}{self.msg}{Color.END}: "
                             f"{routing}{payload}"
                         )
                 else:
+                    routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                     print(
-                        f"{localtime} {Color.YELLOW}{self.msg}{Color.END}: "
+                        f"{localtime} [{data_type}] {Color.YELLOW}{self.msg}{Color.END}: "
                         f"{routing}{payload}"
                     )
             elif len(res[1]) > 0:
