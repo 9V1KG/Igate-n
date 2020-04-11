@@ -9,7 +9,7 @@
 # DU3/M0FGC
 # Slight mods
 #
-# Version 2020-04-10
+# Version 2020-04-11
 #
 
 
@@ -142,29 +142,131 @@ class Color:
     END = "\033[1;37;0m"
 
 
-# classify/decode received payload
+# data types for received payload
 aprs_data_type = {
-    ":": "MSG ",
-    ";": "OBJ ",
-    "=": "POS ",
-    "!": "POS ",
-    "/": "POS ",
-    "@": "POS ",
-    "$": "NMEA",
-    ")": "ITEM",
-    "}": "3PRT",
-    "`": "GPS ",
-    "'": "GPS ",
-    "?": "QURY",
-    ">": "STAT",
-    "<": "CAP ",
-    "T": "TEL ",
-    "#": "WX  ",
-    "*": "WX  ",
-    ",": "TEST",
-    "_": "WX  ",
-    "{": "USER"
+    ":": "MSG ",  # Message or bulletin
+    ";": "OBJ ",  # Object
+    "=": "POS ",  # Position without timestamp (with APRS messaging)
+    "!": "POS ",  # Position without timestamp (no APRS messaging), or Ultimeter 2000 WX Station
+    "/": "POS ",  # Position with timestamp (no APRS messaging)
+    "@": "POS ",  # Position with timestamp (with APRS messaging)
+    "$": "NMEA",  # Raw GPS data or Ultimeter 2000
+    ")": "ITEM",  # Item
+    "}": "3PRT",  # Third-party traffic
+    "`": "MICE",  # Current Mic-E Data (not used in TM-D700)
+    "'": "MICE",  # Old Mic-E Data (but Current data for TM-D700)
+    "?": "QURY",  # Query
+    ">": "STAT",  # Status
+    "<": "CAP ",  # Station Capabilities
+    "T": "TEL ",  # Telemetry data
+    "#": "WX  ",  # Peet Bros U-II Weather Station
+    "*": "WX  ",  # Peet Bros U-II Weather Station
+    ",": "TEST",  # Invalid data or test data
+    "_": "WX  ",  # Weather Report (without position)
+    "{": "USER"   # User-Defined APRS packet format
 }
+
+# Message types for MIC-E encoded frames
+msg_id_m = {
+    0: "Emergency",
+    1: "Priority",
+    2: "Special",
+    3: "Committed",
+    4: "Returning",
+    5: "In Service",
+    6: "En Route",
+    7: "Off Duty"
+}
+msg_id_c = {
+    0: "Custom0",
+    1: "Custom1",
+    2: "Custom2",
+    3: "Custom3",
+    4: "Custom4",
+    5: "Custom5",
+    6: "Custom6",
+    7: "Custom7"
+}
+
+
+def lm(ch: chr) -> chr:
+    """
+    Character decoding for MIC-E destination field
+    used in mic_e_decoding
+    :param ch:
+    :return: modified char
+    """
+    if ord(ch) == 90:
+        # "Z" ambiguity
+        return chr(48)
+    elif ord(ch) > 79:
+        return chr(ord(ch)-32)
+    elif ord(ch) > 64:
+        return chr(ord(ch)-17)
+    return ch
+
+
+def mic_e_decode(m_d: str, m_i: bytes) -> str:
+    """
+    Decodes APRS MIC-E encoded data
+    :param m_d: destination filed
+    :param m_i: payload bytes
+    :return: str with decoded information
+    """
+
+    # Message type first three bytes destination field
+    abc = 0
+    for i in range(0, 3):
+        abc += (4 >> i) if re.match(r"[A-K,P-Z]", m_d[i]) else 0
+    if re.search(r"[A-K]", m_d[0:2]):
+        msg_typ = "cst"
+    elif re.search(r"[P-Z]", m_d[0:2]):
+        msg_typ = "std"
+    elif re.search(r"[0-9]", m_d[0:2]):
+        msg_typ = "0"
+    msg_id = msg_id_m[abc] if msg_typ == "std" else msg_id_c[abc]
+
+    # Lat N/S, Lon E/W and Lon Offset byte 1 to 6
+    d_lat = "S" if re.search(r"[0-L]", m_d[3]) else "N"
+    lon_o = 0 if re.search(r"[0-L]", m_d[4]) else 100
+    d_lon = "E" if re.search(r"[0-L]", m_d[5]) else "W"
+    # Latitude deg and min
+    lat = "".join([lm(ch) for ch in list(m_d)])
+    lat_deg = int(lat[0:2])
+    lat_min = round(int(lat[2:4]) + int(lat[-2:])/100, 2)
+
+    # MIC-E Information field
+    # Longitude deg and min byte 2 to 4 info field
+    lon_deg = m_i[1] - 28 if lon_o == 0 else m_i[1] + 72
+    lon_deg = lon_deg - 80 if 189 >= lon_deg >= 180 else lon_deg
+    lon_deg = lon_deg - 190 if 199 >= lon_deg >= 190 else lon_deg
+    lon_min = m_i[2] - 88 if m_i[2] - 28 >= 60 else m_i[2] - 28
+    lon_min = round(lon_min + (m_i[3] - 28) / 100, 2)
+
+    # Speed and Course bytes 5 to 7 info field
+    sp = (m_i[4] - 28)
+    sp = (sp - 80) * 10 if sp >= 80 else sp * 10 + int((m_i[5] - 28) / 10)
+    sp = sp - 800 if sp >= 800 else sp
+    dc = 100 * ((m_i[5] - 28) % 10) + m_i[6] - 28
+    dc = dc - 400 if dc  >= 400 else dc
+
+    # Symbol bytes 8 to 9 info field
+    sy = chr(m_i[7]) + chr(m_i[8])
+
+    # Check for telemetry
+    if len(m_i) > 9:
+        if int(m_i[9]) in [ord("'"), ord("`"), ord(b'\x1d')]:
+            info = "Telemetry data"
+        else:
+            info = decode_ascii(m_i[9:])[1]
+    else:
+        info = ""
+
+    decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
+              f"{lon_deg} {lon_min}'{d_lon}, " \
+              f"{msg_id}, " \
+              f"Speed: {sp} knots, Course: {dc} deg, Status: {info}"
+    return decoded
 
 
 class Ygate:
@@ -247,15 +349,19 @@ class Ygate:
             exit(0)
         signal.signal(signal.SIGINT, self.signal_handler)
 
-    # Define signal handler for ^C (exit program)
     def signal_handler(self, interupt_signal, frame):
+        """
+        Exit program with ctrl c and print statistics
+        :param interupt_signal:
+        :param frame:
+        :return:
+        """
         print("\r\nCtrl+C, exiting.")
         print(
             "{:d}".format(self.p_gated + self.p_not_gated + self.p_inv_routing) + " packets received, "
             + f"{self.p_gated} Packets gated "
               f"{self.p_not_gated} Packets not gated, "
               f"{self.p_inv_routing} invalid packets."
-
         )
         print("List of unique call sign heard:")
         print(self.call_signs)
@@ -289,7 +395,7 @@ class Ygate:
             self.sck.settimeout(None)
         try:
             self.sck.connect((self.host, self.port))
-        except OSError as msg:
+        except (OSError, TimeoutError) as msg:
             print(
                 f"{l_time} [n/a ] {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
             )
@@ -394,7 +500,7 @@ class Ygate:
         """
         Check whether the packet should be routed to the internet
         :param p_str: (routing, payload)
-        :return: true if ok for routing
+        :return: true if ok for routing false otherwise
         """
         if len(p_str[0]) == 0:
             self.msg = "No Payload, not gated"
@@ -481,6 +587,8 @@ class Ygate:
                 except KeyError:
                     data_type = "    "
                 if self.check_routing((routing, payload)):
+                    if data_type == "MICE":  # extract destination
+                        m_d = re.search(r">(.{6,7}),",routing).group(1)
                     routing = re.sub(
                         r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
@@ -489,6 +597,8 @@ class Ygate:
                         print(
                             f"{localtime} [{data_type}] {routing}{payload}"
                         )
+                        if data_type == "MICE":
+                            print(9 * " " + "[MICE] " + mic_e_decode(m_d, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                         print(
