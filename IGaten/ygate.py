@@ -11,6 +11,7 @@
 #
 # Version 2020-04-11
 #
+# todo Commandline options for IS RX (-i) and MIC-E decode (-d)
 
 
 import os
@@ -196,8 +197,7 @@ def lm(ch: chr) -> chr:
     :param ch:
     :return: modified char
     """
-    if ord(ch) == 90:
-        # "Z" ambiguity
+    if ch in ["K", "L", "Z"]:  # ambiguity
         return chr(48)
     elif ord(ch) > 79:
         return chr(ord(ch)-32)
@@ -239,6 +239,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     d_lat = "S" if re.search(r"[0-L]", m_d[3]) else "N"
     lon_o = 0 if re.search(r"[0-L]", m_d[4]) else 100
     d_lon = "E" if re.search(r"[0-L]", m_d[5]) else "W"
+    ambiguity = (len(re.findall(r"[KLZ]", m_d)))
     # Latitude deg and min
     lat = "".join([lm(ch) for ch in list(m_d)])
     lat_deg = int(lat[0:2])
@@ -273,6 +274,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
 
     decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
               f"{lon_deg} {lon_min}'{d_lon}, " \
+              f"{ambiguity} dig, "\
               f"{msg_id}, " \
               f"Speed: {sp} knots, Course: {dc} deg, Status: {info}"
     return decoded
@@ -501,7 +503,7 @@ class Ygate:
         try:  # receive from APRS-IS test function
             rcvd = self.sock_file.readline().strip()
             if len(rcvd) > 0 and rcvd.find("# aprs") == -1:
-                print(" " * 9 + f"{rcvd}")
+                print(" " * 9 + f"[IS  ] {rcvd}")
             time.sleep(0.2)
         except UnicodeDecodeError:
             pass
