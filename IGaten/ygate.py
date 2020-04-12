@@ -14,6 +14,7 @@
 # todo Commandline options for IS RX (-i) and MIC-E decode (-d)
 
 
+import sys
 import os
 import re
 import signal
@@ -336,6 +337,9 @@ class Ygate:
 
         self.msg = ""  # Status messages
 
+        self.is_decode = True if "-d" in str(sys.argv) else False
+        self.is_receive = True if "-i" in str(sys.argv) else False
+
         print(
             f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
             f"IGgate started - Program by 9V1KG{Color.END}"
@@ -580,7 +584,8 @@ class Ygate:
         :return: nil
         """
         while True:
-            # self.aprsis_rx()  # test only
+            if self.is_receive:  # -i as cmd line argument
+                self.aprsis_rx()
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
             if res[0] > 0:  # invalid ascii char in routing
@@ -610,7 +615,7 @@ class Ygate:
                             f"{localtime} [{data_type}] {routing}{payload}"
                         )
                         # Print decoded MIC-E data
-                        if data_type == "MICE":
+                        if data_type == "MICE" and self.is_decode:
                             print(16 * " " + mic_e_decode(m_d, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)

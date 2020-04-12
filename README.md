@@ -15,10 +15,12 @@ on Windows too
 
 ## Features
 - Runs under Python 3 (tested with 3.7 and 3.8)
-- When started, checks for serial connection 
+- When started, checks for serial connection
+- Command line option -d to show Mic-E decoded Info
+- Command line option -i to show frames receievd from APRS-IS 
 - Checks and recovers from lost network/internet connection
 - Beacon of your position and altitude in compressed format
-- Hourly bulletin
+- Hourly bulletin showing up-time, received/gated packets and unique calls
 - Checks packet payload decoding and highlight invalid bytes 
 - Colored terminal text output
 
@@ -59,7 +61,7 @@ Modify the parameter as explained above. Import `pySerial` and `requests` with:
 
 Start the program from the command line window in your directory with: 
 
-    python3 ygaten.py
+    python3 ygaten.py [-d] [-i]
 
 Stop the program with `ctrl c`.
 
