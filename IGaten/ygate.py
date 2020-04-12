@@ -11,7 +11,6 @@
 #
 # Version 2020-04-11
 #
-# todo Commandline options for IS RX (-i) and MIC-E decode (-d)
 
 
 import sys
@@ -169,25 +168,16 @@ aprs_data_type = {
 }
 
 # Message types for MIC-E encoded frames
-msg_id_m = {
-    0: "Emergency",
-    1: "Priority",
-    2: "Special",
-    3: "Committed",
-    4: "Returning",
-    5: "In Service",
-    6: "En Route",
-    7: "Off Duty"
-}
-msg_id_c = {
-    0: "Emergency",
-    1: "Custom-6",
-    2: "Custom-5",
-    3: "Custom-4",
-    4: "Custom-3",
-    5: "Custom-2",
-    6: "Custom-1",
-    7: "Custom-0"
+msg_typ = { "std": 0, "cst": 1}
+msg_id = {
+    0: ["Emergency", "Emergency,"],
+    1: ["Priority", "Custom-6"],
+    2: ["Special", "Custom-5"],
+    3: ["Committed", "Custom-4"],
+    4: ["Returning", "Custom-3"],
+    5: ["In Service", "Custom-2"],
+    6: ["En Route", "Custom-1"],
+    7: ["Off Duty", "Custom-0"],
 }
 
 
@@ -215,7 +205,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     :return: str with decoded information
     """
     # Check validity of input parameters
-    if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$",m_d):
+    if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
         return "Invalid destination field"
     if not re.match(
             r"[\x1c\x1d`'][&-~,\x7f][&-a][\x1c-~,\x7f]{5,}", m_i.decode("ascii")
@@ -223,18 +213,14 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
         return "Invalid information field"
 
     # Message type first three bytes destination field
-    msg_typ: str = ""
-    abc = 0
+    msg_t: str = "std"
+    mbits = 0  # message bits (0 - 7)
     for i in range(0, 3):
-        abc += (4 >> i) if re.match(r"[A-K,P-Z]", m_d[i]) else 0
-    # print("Message type: {:03b}".format(abc))
+        mbits += (4 >> i) if re.match(r"[A-K,P-Z]", m_d[i]) else 0
+    # print("Message bits: {:03b}".format(mbits))
     if re.search(r"[A-K]", m_d[0:3]):
-        msg_typ = "cst"
-    elif re.search(r"[P-Z]", m_d[0:3]):
-        msg_typ = "std"
-    elif re.search(r"[0-9]", m_d[0:3]):
-        msg_typ = "0"
-    msg_id = msg_id_m[abc] if msg_typ == "std" else msg_id_c[abc]
+        msg_t = "cst"  # custom
+    msg = msg_id[mbits][msg_typ[msg_t]]
 
     # Lat N/S, Lon E/W and Lon Offset byte 1 to 6
     d_lat = "S" if re.search(r"[0-L]", m_d[3]) else "N"
@@ -267,6 +253,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     # Check for telemetry
     if len(m_i) > 9:
         if m_i[9] in [b"'", b"`", b'\x1d']:
+            # todo decode telemetry data
             info = "Telemetry data"
         else:
             info = decode_ascii(m_i[9:])[1]
@@ -276,7 +263,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
               f"{lon_deg} {lon_min}'{d_lon}, " \
               f"{ambiguity} dig, "\
-              f"{msg_id}, " \
+              f"{msg}, " \
               f"Speed: {sp} knots, Course: {dc} deg, Status: {info}"
     return decoded
 
@@ -604,8 +591,9 @@ class Ygate:
                 except KeyError:
                     data_type = "    "
                 if self.check_routing((routing, payload)):
-                    if data_type == "MICE":  # extract destination
-                        m_d = re.search(r">(.{6,7}),",routing).group(1)
+                    m_d = re.search(
+                        r">(.{6,7}),", routing
+                    ).group(1)  # extract destination
                     routing = re.sub(
                         r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"

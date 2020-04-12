@@ -21,7 +21,7 @@ on Windows too
 - Checks and recovers from lost network/internet connection
 - Beacon of your position and altitude in compressed format
 - Hourly bulletin showing up-time, received/gated packets and unique calls
-- Checks packet payload decoding and highlight invalid bytes 
+- Checks packet payload decoding and highlight invalid bytes
 - Colored terminal text output
 
 ## User Settings
