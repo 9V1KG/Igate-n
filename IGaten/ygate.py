@@ -264,7 +264,7 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
 
     # Check for telemetry
     if len(m_i) > 9:
-        if int(m_i[9]) in [ord("'"), ord("`"), ord(b'\x1d')]:
+        if m_i[9] in [b"'", b"`", b'\x1d']:
             info = "Telemetry data"
         else:
             info = decode_ascii(m_i[9:])[1]
@@ -407,7 +407,7 @@ class Ygate:
             self.sck.connect((self.host, self.port))
         except (OSError, TimeoutError) as msg:
             print(
-                f"{l_time} [n/a ] {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
+                f"{l_time} {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
             )
             return False
         self.sck.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -472,7 +472,7 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        position_string = f"{self.user}>{VERS},TCPIP*:={self.pos_c}{self.beacon_txt}\n"
+        position_string = f"{self.user}>{self.VERS},TCPIP*:={self.pos_c}{self.beacon_txt}\n"
         threading.Timer(self.beacon_time, self.send_my_position).start()
         self.send_aprs(position_string)
 
@@ -489,7 +489,7 @@ class Ygate:
                 f" {round(td.seconds/3600,1)} h - " \
                 f"{p_tot} rcvd, {self.p_gated} gtd, " \
                 f"{n_calls} unique calls"
-        bulletin = f"{self.user}>{VERS},TCPIP*::BLN1     :{self.bulletin_txt}\n"
+        bulletin = f"{self.user}>{self.VERS},TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
@@ -609,7 +609,7 @@ class Ygate:
                         )
                         # Print decoded MIC-E data
                         if data_type == "MICE":
-                            print(15 * " " + mic_e_decode(m_d, b_read))
+                            print(16 * " " + mic_e_decode(m_d, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                         print(
