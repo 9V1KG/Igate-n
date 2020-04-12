@@ -178,14 +178,14 @@ msg_id_m = {
     7: "Off Duty"
 }
 msg_id_c = {
-    0: "Custom0",
-    1: "Custom1",
-    2: "Custom2",
-    3: "Custom3",
-    4: "Custom4",
-    5: "Custom5",
-    6: "Custom6",
-    7: "Custom7"
+    0: "Emergency",
+    1: "Custom-6",
+    2: "Custom-5",
+    3: "Custom-4",
+    4: "Custom-3",
+    5: "Custom-2",
+    6: "Custom-1",
+    7: "Custom-0"
 }
 
 
@@ -213,16 +213,25 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     :param m_i: payload bytes
     :return: str with decoded information
     """
+    # Check validity of input parameters
+    if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$",m_d):
+        return "Invalid destination field"
+    if not re.match(
+            r"[\x1c\x1d`'][&-~,\x7f][&-a][\x1c-~,\x7f]{5,}", m_i.decode("ascii")
+    ):
+        return "Invalid information field"
 
     # Message type first three bytes destination field
+    msg_typ: str = ""
     abc = 0
     for i in range(0, 3):
         abc += (4 >> i) if re.match(r"[A-K,P-Z]", m_d[i]) else 0
-    if re.search(r"[A-K]", m_d[0:2]):
+    # print("Message type: {:03b}".format(abc))
+    if re.search(r"[A-K]", m_d[0:3]):
         msg_typ = "cst"
-    elif re.search(r"[P-Z]", m_d[0:2]):
+    elif re.search(r"[P-Z]", m_d[0:3]):
         msg_typ = "std"
-    elif re.search(r"[0-9]", m_d[0:2]):
+    elif re.search(r"[0-9]", m_d[0:3]):
         msg_typ = "0"
     msg_id = msg_id_m[abc] if msg_typ == "std" else msg_id_c[abc]
 
@@ -273,6 +282,7 @@ class Ygate:
 
     HOURLY = 3600.0
     FORMAT = "ascii"
+    VERS = "APZ090"  # Software experimental vers 0.9.0
 
     # todo: answer to ?IGATE? query with MSG_CNT and LOC_CNT
     MSG_CNT = 0  # messages transmitted
@@ -462,7 +472,7 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        position_string = f"{self.user}>APRS,TCPIP*:={self.pos_c}{self.beacon_txt}\n"
+        position_string = f"{self.user}>{VERS},TCPIP*:={self.pos_c}{self.beacon_txt}\n"
         threading.Timer(self.beacon_time, self.send_my_position).start()
         self.send_aprs(position_string)
 
@@ -479,7 +489,7 @@ class Ygate:
                 f" {round(td.seconds/3600,1)} h - " \
                 f"{p_tot} rcvd, {self.p_gated} gtd, " \
                 f"{n_calls} unique calls"
-        bulletin = f"{self.user}>APRS,TCPIP*::BLN1     :{self.bulletin_txt}\n"
+        bulletin = f"{self.user}>{VERS},TCPIP*::BLN1     :{self.bulletin_txt}\n"
         threading.Timer(self.HOURLY, self.send_bulletin).start()
         self.send_aprs(bulletin)
 
@@ -597,8 +607,9 @@ class Ygate:
                         print(
                             f"{localtime} [{data_type}] {routing}{payload}"
                         )
+                        # Print decoded MIC-E data
                         if data_type == "MICE":
-                            print(9 * " " + "[MICE] " + mic_e_decode(m_d, b_read))
+                            print(15 * " " + mic_e_decode(m_d, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                         print(
