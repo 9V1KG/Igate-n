@@ -211,13 +211,14 @@ def lm(ch: chr) -> chr:
     return ch
 
 
-def mic_e_decode(m_d: str, m_i: bytes) -> str:
+def mic_e_decode(route: str, m_i: bytes) -> str:
     """
     Decodes APRS MIC-E encoded data
-    :param m_d: destination filed
+    :param route: destination filed
     :param m_i: payload bytes
     :return: str with decoded information
     """
+    m_d = re.search(r">([A-Z,\d]{6,7}),", route).group(1)  # extract destination
     # Check validity of input parameters
     if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
         return "Invalid destination field"
@@ -281,8 +282,10 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
 
     decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
               f"{lon_deg} {lon_min}'{d_lon}, " \
-              f"{ambiguity} dig, "\
               f"{msg}, "
+
+    if ambiguity > 0:
+        decoded += f"Ambgty: {ambiguity} dig, "
     if sp > 0:
         decoded += f"Speed: {sp} knots, "
     if dc > 0:
@@ -305,8 +308,9 @@ class Ygate:
 
     def __init__(
         self,
-        USER="MYCALL-10",
-        PASS="0000",
+        USER="MYCALL",
+        SSID=10,
+        PASS=00000,
         LAT=(14, 7.09, "N"),
         LON=(120, 58.07, "E"),
         ALT=(0.0, "m"),
@@ -317,6 +321,7 @@ class Ygate:
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
+        :param SSID:   SSID for the gateway
         :param PASS:   Your aprs secret code
         :param LAT:    Latitude
         :param LON:    Longitude
@@ -327,8 +332,9 @@ class Ygate:
         :param BLNTXT: Beacon text
         """
 
-        self.user = USER
-        self.secret = PASS
+        self.call = USER
+        self.user = f"{USER}-{SSID}"
+        self.secret = f"{PASS}"
         self.beacon_txt = BCNTXT
         self.beacon_time = BEACON
         self.bulletin_txt = f"{USER} {BLNTXT}"  # Bulletin
@@ -591,6 +597,20 @@ class Ygate:
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
 
+    def get_data_type(self, pl) -> str:
+        try:
+            dt = aprs_data_type[pl[0]]
+            # get target call for messages
+            m = re.search(r":\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}-?\d{0,2} {0,6}:", pl)
+            if (dt == "MSG " or dt == "3PRT") and m:
+                # Check for own messages - remove ssid
+                call = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", m.group())
+                if call and call.group() == self.call:
+                    dt = f"{Color.PURPLE}MSG!{Color.END}"
+        except KeyError:
+            dt = "    "
+        return dt
+
     def start(self):
         """
         Starts Igate and runs in loop until terminated with Ctrl C
@@ -611,15 +631,10 @@ class Ygate:
                 routing = res[1]
                 b_read = self.ser.read_until()  # next line is payload
                 res = decode_ascii(b_read)
-                payload = res[1]  # non ascii chars will be passed as they are
-                try:
-                    data_type = aprs_data_type[payload[0]]
-                except KeyError:
-                    data_type = "    "
+                payload = res[1]  # non ascii chars will be shown as\xnn
+                data_type = self.get_data_type(payload)
                 if self.check_routing((routing, payload)):
-                    m_d = re.search(
-                        r">(.{6,7}),", routing
-                    ).group(1)  # extract destination
+                    # here we know valid packet for routing starting w call sign
                     routing = re.sub(
                         r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
@@ -630,7 +645,7 @@ class Ygate:
                         )
                         # Print decoded MIC-E data
                         if data_type == "MICE" and self.is_decode:
-                            print(16 * " " + mic_e_decode(m_d, b_read))
+                            print(16 * " " + mic_e_decode(routing, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
                         print(
