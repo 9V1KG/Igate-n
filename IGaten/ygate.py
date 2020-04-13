@@ -597,7 +597,12 @@ class Ygate:
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
             exit(0)
 
-    def get_data_type(self, pl) -> str:
+    def get_data_type(self, pl: str) -> str:
+        """
+        Checs for data id and messages to own call sign
+        :param pl: payload
+        :return: message id
+        """
         try:
             dt = aprs_data_type[pl[0]]
             # get target call for messages

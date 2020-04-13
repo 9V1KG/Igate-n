@@ -27,7 +27,8 @@ on Windows too
 ## User Settings
 Please modify the following parameter in `ygaten.py` the according to your requirements:
 
-     USER:   your call sign with ssid, e.g. DU1KG-10
+     USER:   your call sign, e.g. DU1KG
+     SSID:   ssid for the gateway (usually 10)
      PASS:   your APRS 5-digit pass code
      LAT:    Latitude and 
      LON:    Longitude of your position in the format
