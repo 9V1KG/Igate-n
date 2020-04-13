@@ -288,8 +288,8 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     if dc > 0:
         decoded += f"Course: {dc} deg, "
     if alt > 0:
-        decoded += f"Alt: {alt}, "
-    decoded += f"Status: {info}"
+        decoded += f"Alt: {alt} m, "
+    # decoded += f"Status: {info}"
     return decoded
 
 
@@ -307,8 +307,8 @@ class Ygate:
         self,
         USER="MYCALL-10",
         PASS="0000",
-        LAT=(14, 5.09, "N"),
-        LON=(119, 58.07, "E"),
+        LAT=(14, 7.09, "N"),
+        LON=(120, 58.07, "E"),
         ALT=(0.0, "m"),
         SERIAL="/dev/ttyUSB0",
         BCNTXT="IGate RF-IS 144.39 - 73",
