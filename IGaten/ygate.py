@@ -26,6 +26,60 @@ import requests
 import math
 
 
+class Color:
+    """
+    Colors used by the ygaten project
+    """
+    PURPLE = "\033[1;35;48m"
+    CYAN = "\033[1;36;48m"
+    BOLD = "\033[1;37;48m"
+    BLUE = "\033[1;34;48m"
+    GREEN = "\033[1;32;48m"
+    YELLOW = "\033[1;33;48m"
+    RED = "\033[1;31;48m"
+    BLACK = "\033[1;30;48m"
+    UNDERLINE = "\033[4;37;48m"
+    END = "\033[1;37;0m"
+
+
+# data types for received payload
+aprs_data_type = {
+    ":": "MSG ",  # Message or bulletin
+    ";": "OBJ ",  # Object
+    "=": "POS ",  # Position without timestamp (with APRS messaging)
+    "!": "POS ",  # Position without timestamp (no APRS messaging), or Ultimeter 2000 WX Station
+    "/": "POS ",  # Position with timestamp (no APRS messaging)
+    "@": "POS ",  # Position with timestamp (with APRS messaging)
+    "$": "NMEA",  # Raw GPS data or Ultimeter 2000
+    ")": "ITEM",  # Item
+    "}": "3PRT",  # Third-party traffic
+    "`": "MICE",  # Current Mic-E Data (not used in TM-D700)
+    "'": "MICE",  # Old Mic-E Data (but Current data for TM-D700)
+    "?": "QURY",  # Query
+    ">": "STAT",  # Status
+    "<": "CAP ",  # Station Capabilities
+    "T": "TEL ",  # Telemetry data
+    "#": "WX  ",  # Peet Bros U-II Weather Station
+    "*": "WX  ",  # Peet Bros U-II Weather Station
+    ",": "TEST",  # Invalid data or test data
+    "_": "WX  ",  # Weather Report (without position)
+    "{": "USER"   # User-Defined APRS packet format
+}
+
+# Message types for MIC-E encoded frames
+msg_typ = { "std": 0, "cst": 1}
+msg_id = {
+    0: ["Emergency", "Emergency,"],
+    1: ["Priority", "Custom-6"],
+    2: ["Special", "Custom-5"],
+    3: ["Committed", "Custom-4"],
+    4: ["Returning", "Custom-3"],
+    5: ["In Service", "Custom-2"],
+    6: ["En Route", "Custom-1"],
+    7: ["Off Duty", "Custom-0"],
+}
+
+
 def format_position(lon: tuple, lat: tuple) -> str:
     """
     # Formatted uncompressed APRS Position String
@@ -39,18 +93,32 @@ def format_position(lon: tuple, lat: tuple) -> str:
     return f"{lat}{symbol[0]}{lon}{symbol[1]}"
 
 
-def b91(r) -> str:
+def b91_encode(r) -> str:
     """
-    # Calculates 4 char ASCII string base 91 from r
+    # Calculates an ASCII string base 91 from r
     :param r: scaled position latitude or longitude
-    :return: 4 char string
+    :return: character string
     """
+    # todo make it universal
     ls = ""
-    for i in range(0, 4):
-        dv = 91 ** (3 - i)
+    for i in range(0, 5):
+        dv = 91 ** (4 - i)
         ls += chr(int(r / dv) + 33)
         r = r % dv
-    return ls
+    return ls.lstrip("!")
+
+
+def b91_decode(s: str) -> int:
+    """
+    Decodes ASCII string base 91 to number
+    :param s: base 91 encoded ASCII string
+    :return: r result
+    """
+    p = len(s) - 1
+    r = 0
+    for i, ch in enumerate(s):
+        r += (ord(ch)-33) * 91**(p-i)
+    return r
 
 
 def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
@@ -68,9 +136,9 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
     lat_dec = -(lat[0] + lat[1]/60.) if "S" in lat[2] else (lat[0] + lat[1]/60.)
     lon_dec = -(lon[0] + lon[1]/60.) if "W" in lat[2] else (lon[0] + lon[1]/60.)
     r = int(380926 * (90.0 - lat_dec))
-    lstr += b91(r)  # Compressed Latitude XXXX
+    lstr += b91_encode(r)  # Compressed Latitude XXXX
     r = int(190463 * (180.0 + lon_dec))
-    lstr += b91(r)  # Compressed Longitude YYYY
+    lstr += b91_encode(r)  # Compressed Longitude YYYY
 
     lstr += symbol[1]  # station symbol
 
@@ -125,60 +193,6 @@ def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
         return False
     except requests.ConnectionError:
         return False
-
-
-class Color:
-    """
-    Colors used by the ygaten project
-    """
-    PURPLE = "\033[1;35;48m"
-    CYAN = "\033[1;36;48m"
-    BOLD = "\033[1;37;48m"
-    BLUE = "\033[1;34;48m"
-    GREEN = "\033[1;32;48m"
-    YELLOW = "\033[1;33;48m"
-    RED = "\033[1;31;48m"
-    BLACK = "\033[1;30;48m"
-    UNDERLINE = "\033[4;37;48m"
-    END = "\033[1;37;0m"
-
-
-# data types for received payload
-aprs_data_type = {
-    ":": "MSG ",  # Message or bulletin
-    ";": "OBJ ",  # Object
-    "=": "POS ",  # Position without timestamp (with APRS messaging)
-    "!": "POS ",  # Position without timestamp (no APRS messaging), or Ultimeter 2000 WX Station
-    "/": "POS ",  # Position with timestamp (no APRS messaging)
-    "@": "POS ",  # Position with timestamp (with APRS messaging)
-    "$": "NMEA",  # Raw GPS data or Ultimeter 2000
-    ")": "ITEM",  # Item
-    "}": "3PRT",  # Third-party traffic
-    "`": "MICE",  # Current Mic-E Data (not used in TM-D700)
-    "'": "MICE",  # Old Mic-E Data (but Current data for TM-D700)
-    "?": "QURY",  # Query
-    ">": "STAT",  # Status
-    "<": "CAP ",  # Station Capabilities
-    "T": "TEL ",  # Telemetry data
-    "#": "WX  ",  # Peet Bros U-II Weather Station
-    "*": "WX  ",  # Peet Bros U-II Weather Station
-    ",": "TEST",  # Invalid data or test data
-    "_": "WX  ",  # Weather Report (without position)
-    "{": "USER"   # User-Defined APRS packet format
-}
-
-# Message types for MIC-E encoded frames
-msg_typ = { "std": 0, "cst": 1}
-msg_id = {
-    0: ["Emergency", "Emergency,"],
-    1: ["Priority", "Custom-6"],
-    2: ["Special", "Custom-5"],
-    3: ["Committed", "Custom-4"],
-    4: ["Returning", "Custom-3"],
-    5: ["In Service", "Custom-2"],
-    6: ["En Route", "Custom-1"],
-    7: ["Off Duty", "Custom-0"],
-}
 
 
 def lm(ch: chr) -> chr:
@@ -250,21 +264,32 @@ def mic_e_decode(m_d: str, m_i: bytes) -> str:
     # Symbol bytes 8 to 9 info field
     sy = chr(m_i[7]) + chr(m_i[8])
 
-    # Check for telemetry
+    # Check for altitude or telemetry
+    alt: int = 0
     if len(m_i) > 9:
+        info = decode_ascii(m_i[9:])[1]
+        # Check for altitude
+        m = re.search(r".{3}}", info)
+        if m:
+            alt = b91_decode(m.group()[:3]) - 10000
         if m_i[9] in [b"'", b"`", b'\x1d']:
             # todo decode telemetry data
+            # "'" 5 HEX, "`" 2 HEX "\x1d" 5 binary
             info = "Telemetry data"
-        else:
-            info = decode_ascii(m_i[9:])[1]
     else:
         info = ""
 
     decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
               f"{lon_deg} {lon_min}'{d_lon}, " \
               f"{ambiguity} dig, "\
-              f"{msg}, " \
-              f"Speed: {sp} knots, Course: {dc} deg, Status: {info}"
+              f"{msg}, "
+    if sp > 0:
+        decoded += f"Speed: {sp} knots, "
+    if dc > 0:
+        decoded += f"Course: {dc} deg, "
+    if alt > 0:
+        decoded += f"Alt: {alt}, "
+    decoded += f"Status: {info}"
     return decoded
 
 
@@ -332,6 +357,7 @@ class Ygate:
             f"IGgate started - Program by 9V1KG{Color.END}"
         )
         print(" " * 9 + f"Position: {self.pos_f}")
+        print(" " * 9 + f"Position: {self.pos_c}")
         loc_time = time.strftime("%H:%M:%S")
         self.open_serial(SERIAL)
         if is_internet():  # check internet connection

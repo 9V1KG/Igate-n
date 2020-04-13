@@ -28,16 +28,16 @@ class TestFunctions(TestCase):
 
     def test_b91(self):
         # 0 bits set
-        self.assertEqual(IGaten.b91(0), "!!!!")
+        self.assertEqual(IGaten.b91_encode(0), "!!!!")
         # 1 LSB Set
-        self.assertEqual(IGaten.b91(90), "!!!{")
-        self.assertEqual(IGaten.b91(91), '!!"!')
+        self.assertEqual(IGaten.b91_encode(90), "!!!{")
+        self.assertEqual(IGaten.b91_encode(91), '!!"!')
         # 2 LSB Set
-        self.assertEqual(IGaten.b91(91 + 90), '!!"{')
-        self.assertEqual(IGaten.b91(91 ** 2), '!"!!')
-        self.assertEqual(IGaten.b91(91 ** 3), '"!!!')
+        self.assertEqual(IGaten.b91_encode(91 + 90), '!!"{')
+        self.assertEqual(IGaten.b91_encode(91 ** 2), '!"!!')
+        self.assertEqual(IGaten.b91_encode(91 ** 3), '"!!!')
         # All Bits Set
-        self.assertEqual(IGaten.b91((91 ** 4) - 1), "{{{{")
+        self.assertEqual(IGaten.b91_encode((91 ** 4) - 1), "{{{{")
         # There are 91**4 -1 possible combinations however.... !!
 
     @patch("IGaten.is_internet")
