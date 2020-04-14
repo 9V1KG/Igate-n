@@ -93,7 +93,7 @@ def format_position(lon: tuple, lat: tuple) -> str:
     return f"{lat}{symbol[0]}{lon}{symbol[1]}"
 
 
-def b91_encode(r) -> str:
+def b91_encode(r: int) -> str:
     """
     # Calculates an ASCII string base 91 from r
     :param r: scaled position latitude or longitude
@@ -214,11 +214,14 @@ def lm(ch: chr) -> chr:
 def mic_e_decode(route: str, m_i: bytes) -> str:
     """
     Decodes APRS MIC-E encoded data
-    :param route: destination filed
+    :param route: routing field
     :param m_i: payload bytes
     :return: str with decoded information
     """
-    m_d = re.search(r">([A-Z,\d]{6,7}),", route).group(1)  # extract destination
+    m_d = re.search(r">([A-Z,\d]{6,7}),", route)  # extract destination
+    if not m_d:
+        return "Invalid destination field"
+    m_d = m_d.group(1)
     # Check validity of input parameters
     if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
         return "Invalid destination field"
@@ -229,7 +232,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
 
     # Message type first three bytes destination field
     msg_t: str = "std"
-    mbits = 0  # message bits (0 - 7)
+    mbits: int = 0  # message bits (0 - 7)
     for i in range(0, 3):
         mbits += (4 >> i) if re.match(r"[A-K,P-Z]", m_d[i]) else 0
     # print("Message bits: {:03b}".format(mbits))
@@ -260,7 +263,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     sp = (sp - 80) * 10 if sp >= 80 else sp * 10 + int((m_i[5] - 28) / 10)
     sp = sp - 800 if sp >= 800 else sp
     dc = 100 * ((m_i[5] - 28) % 10) + m_i[6] - 28
-    dc = dc - 400 if dc  >= 400 else dc
+    dc = dc - 400 if dc >= 400 else dc
 
     # Symbol bytes 8 to 9 info field
     sy = chr(m_i[7]) + chr(m_i[8])
@@ -300,6 +303,7 @@ class Ygate:
 
     HOURLY = 3600.0
     FORMAT = "ascii"
+    RANGE = 150  # Range filter for APRS-IS in km
     VERS = "APZ090"  # Software experimental vers 0.9.0
 
     # todo: answer to ?IGATE? query with MSG_CNT and LOC_CNT
@@ -444,7 +448,7 @@ class Ygate:
         # Login to APRS Server
         self.sck.sendall(
             bytes(f"user {self.user} pass {self.secret} "
-                  f"9V1KG-ygate 0.9 filter m/150\n\r", "utf-8")
+                  f"9V1KG-ygate 0.9 filter m/{self.RANGE}\n\r", "utf-8")
         )
         # if second line contains "unverified", login was not successful
         login = self.sock_file.readline().strip()  # 2nd response line
@@ -609,7 +613,7 @@ class Ygate:
             m = re.search(r":\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}-?\d{0,2} {0,6}:", pl)
             if (dt == "MSG " or dt == "3PRT") and m:
                 # Check for own messages - remove ssid
-                call = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", m.group())
+                call = re.search(r"\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}", m.group())
                 if call and call.group() == self.call:
                     dt = f"{Color.PURPLE}MSG!{Color.END}"
         except KeyError:

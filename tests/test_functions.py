@@ -17,7 +17,7 @@ class TestFunctions(TestCase):
 
     def test_decode_ascii(self):
         print("Test decode_ascii:")
-        b_str = b'test byte string with 2\xb0 invalid\xff chars'
+        b_str = b'test byte string with 2\xb0 invalid\xef chars'
         r_str = IGaten.decode_ascii(b_str)
         self.assertEqual(r_str[0], 2)
         print(r_str[1])
@@ -26,19 +26,29 @@ class TestFunctions(TestCase):
         print(r_str[1])
         self.assertEqual(r_str[0], 0)
 
-    def test_b91(self):
+    def test_b91_encode(self):
         # 0 bits set
-        self.assertEqual(IGaten.b91_encode(0), "!!!!")
+        self.assertEqual(IGaten.b91_encode(0), "")
         # 1 LSB Set
-        self.assertEqual(IGaten.b91_encode(90), "!!!{")
-        self.assertEqual(IGaten.b91_encode(91), '!!"!')
+        self.assertEqual(IGaten.b91_encode(90), "{")
+        self.assertEqual(IGaten.b91_encode(91), '"!')
         # 2 LSB Set
-        self.assertEqual(IGaten.b91_encode(91 + 90), '!!"{')
-        self.assertEqual(IGaten.b91_encode(91 ** 2), '!"!!')
+        self.assertEqual(IGaten.b91_encode(91 + 90), '"{')
+        self.assertEqual(IGaten.b91_encode(91 ** 2), '"!!')
         self.assertEqual(IGaten.b91_encode(91 ** 3), '"!!!')
         # All Bits Set
         self.assertEqual(IGaten.b91_encode((91 ** 4) - 1), "{{{{")
         # There are 91**4 -1 possible combinations however.... !!
+
+    def test_b91_decode(self):
+        self.assertEqual(IGaten.b91_decode(''), 0)
+        self.assertEqual(IGaten.b91_decode('{'), 90)
+        self.assertEqual(IGaten.b91_decode('"!'), 91)
+        self.assertEqual(IGaten.b91_decode('"{'), 91 + 90)
+        self.assertEqual(IGaten.b91_decode('"!!'), 91 ** 2)
+        self.assertEqual(IGaten.b91_decode('"!!!'), 91 ** 3)
+        self.assertEqual(IGaten.b91_decode('{{{{'), (91 ** 4) - 1)
+
 
     @patch("IGaten.is_internet")
     def test_is_internet(self, mocked_method):
@@ -76,3 +86,24 @@ class TestFunctions(TestCase):
         self.assertEqual(res, "/3,1nQ-<y#   ")
         res = IGaten.compress_position(lon1, lat2, alt=(150, "m"))
         self.assertEqual(res, "/3,1nQ-<y#C)t")
+
+    def test_lm(self):
+        self.assertEqual(IGaten.lm("0"),"0")
+        self.assertEqual(IGaten.lm("A"),"0")
+        self.assertEqual(IGaten.lm("P"),"0")
+        self.assertEqual(IGaten.lm("K"),"0")
+        self.assertEqual(IGaten.lm("L"),"0")
+        self.assertEqual(IGaten.lm("Z"),"0")
+
+    def test_mic_e_decode(self):
+        self.assertEqual(IGaten.mic_e_decode(
+            " ",
+            b'`0V l\x1c -/`":-}435.350MHz DU1KG home 73 Klaus_%'),
+            "Invalid destination field")
+        self.assertEqual(IGaten.mic_e_decode(
+            "DU1KG-1>Q4PWQ0,DY1P,WIDE1*,WIDE2-1,qAR,DU1KG-10:",
+            b'`0V l \x1c-/`":-}435.350MHz DU1KG home 73 Klaus_%'),
+            "Pos: 14 7.1'N, 120 58.04'E, In Service, Alt: 568 m, ")
+        self.assertEqual(IGaten.mic_e_decode(
+            "DU1KG-1>Q4PWQ0,DY1P,WIDE1*,WIDE2-1,qAR,DU1KG-10:", b''),
+            "Invalid information field")
