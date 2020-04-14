@@ -1,30 +1,27 @@
-# Ygate-n Yaesu igate
-# This script is based on an idea from Craig Lamparter
-# https://github.com/hessu/ygate
-#
-# 9V1KG Klaus D Goepel -
-# https://klsin.bpmsg.com
-# https://github.com/9V1KG/Igate-n
-#
-# DU3/M0FGC
-# Slight mods
-#
-# Version 2020-04-14
-#
-# todo Commandline options for IS RX (-i) and MIC-E decode (-d)
+"""
+    Ygate-n Yaesu igate
+    This script is based on an idea from Craig Lamparter
+    https://github.com/hessu/ygate
 
+    9V1KG Klaus D Goepel -
+    https://klsin.bpmsg.com
+    https://github.com/9V1KG/Igate-n
 
+    DU3TW (M0FGC)
+    Slight mods
+
+    Version 2020-04-14
+"""
 import sys
-import os
 import re
 import signal
 import socket
 import threading
 import datetime
 import time
+import math
 import serial
 import requests
-import math
 
 
 class Color:
@@ -44,7 +41,7 @@ class Color:
 
 
 # data types for received payload
-aprs_data_type = {
+APRS_DATA_TYPE = {
     ":": "MSG ",  # Message or bulletin
     ";": "OBJ ",  # Object
     "=": "POS ",  # Position without timestamp (with APRS messaging)
@@ -68,8 +65,8 @@ aprs_data_type = {
 }
 
 # Message types for MIC-E encoded frames
-msg_typ = { "std": 0, "cst": 1}
-msg_id = {
+MSG_TYP = {"std": 0, "cst": 1}
+MSG_ID = {
     0: ["Emergency", "Emergency,"],
     1: ["Priority", "Custom-6"],
     2: ["Special", "Custom-5"],
@@ -94,32 +91,32 @@ def format_position(lon: tuple, lat: tuple) -> str:
     return f"{lat}{symbol[0]}{lon}{symbol[1]}"
 
 
-def b91_encode(r: int) -> str:
+def b91_encode(v_int: int) -> str:
     """
     # Calculates an ASCII string base 91 from r
-    :param r: scaled position latitude or longitude
+    :param v_int: scaled position latitude or longitude
     :return: character string
     """
     # todo make it universal
-    ls = ""
+    l_str = ""
     for i in range(0, 5):
-        dv = 91 ** (4 - i)
-        ls += chr(int(r / dv) + 33)
-        r = r % dv
-    return ls.lstrip("!")
+        dvr = 91 ** (4 - i)
+        l_str += chr(int(v_int / dvr) + 33)
+        v_int = v_int % dvr
+    return l_str.lstrip("!")
 
 
-def b91_decode(s: str) -> int:
+def b91_decode(l_str: str) -> int:
     """
     Decodes ASCII string base 91 to number
-    :param s: base 91 encoded ASCII string
+    :param l_str: base 91 encoded ASCII string
     :return: r result
     """
-    p = len(s) - 1
-    r = 0
-    for i, ch in enumerate(s):
-        r += (ord(ch)-33) * 91**(p-i)
-    return r
+    l_len = len(l_str) - 1
+    v_int = 0
+    for i, l_chr in enumerate(l_str):
+        v_int += (ord(l_chr)-33) * 91**(l_len-i)
+    return v_int
 
 
 def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
@@ -136,19 +133,19 @@ def compress_position(lon: tuple, lat: tuple, alt: tuple = (0.0, "m")) -> str:
 
     lat_dec = -(lat[0] + lat[1]/60.) if "S" in lat[2] else (lat[0] + lat[1]/60.)
     lon_dec = -(lon[0] + lon[1]/60.) if "W" in lat[2] else (lon[0] + lon[1]/60.)
-    r = int(380926 * (90.0 - lat_dec))
-    lstr += b91_encode(r)  # Compressed Latitude XXXX
-    r = int(190463 * (180.0 + lon_dec))
-    lstr += b91_encode(r)  # Compressed Longitude YYYY
+    v_int = int(380926 * (90.0 - lat_dec))
+    lstr += b91_encode(v_int)  # Compressed Latitude XXXX
+    v_int = int(190463 * (180.0 + lon_dec))
+    lstr += b91_encode(v_int)  # Compressed Longitude YYYY
 
     lstr += symbol[1]  # station symbol
 
     if alt[0] == 0.:
         lstr += "   "  # no altitude data
     else:  # csT bytes
-        hf = alt[0]/0.3048 if "m" in alt[1] else alt[0]
-        a = int(math.log(hf) / math.log(1.002))
-        lstr += chr(33 + int(a / 91)) + chr(33 + int(a % 91))
+        h_ft = alt[0]/0.3048 if "m" in alt[1] else alt[0]
+        a_pot = int(math.log(h_ft) / math.log(1.002))
+        lstr += chr(33 + int(a_pot / 91)) + chr(33 + int(a_pot % 91))
         lstr += chr(33 + int("00110010", 2) + 33)  # comp type altitude
     return lstr
 
@@ -159,20 +156,20 @@ def decode_ascii(bstr) -> tuple:
     :param bstr: Byte string to be decoded
     :return: number of invalid bytes, string with non ascii bytes highlighted
     """
-    nb = 0  # number of invalid bytes
-    pl = ""
+    inv_byt = 0  # number of invalid bytes
+    str_dec = ""
     while len(bstr) > 0:
         try:
-            pl += bstr.decode("ascii").strip("\n\r")
+            str_dec += bstr.decode("ascii").strip("\n\r")
             bstr = b""
         except UnicodeDecodeError as msg:
-            nb += 1
-            pl += (f"{bstr[:msg.start]}"[2:-1]) \
+            inv_byt += 1
+            str_dec += (f"{bstr[:msg.start]}"[2:-1]) \
                 + Color.RED \
                 + (f"{bstr[msg.start:msg.end]}"[2:-1]) \
                 + Color.END
             bstr = bstr[msg.end:]
-    return nb, pl
+    return inv_byt, str_dec
 
 
 def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
@@ -187,29 +184,30 @@ def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
         # HTTP errors are not raised by default, this statement does that
         req.raise_for_status()
         return True
-    except requests.HTTPError as e:
+    except requests.HTTPError as h_err:
         print(
-            f"{Color.RED}Internet connection failed, status code {e.response.status_code}{Color.END}"
+            f"{Color.RED}Internet connection failed, "
+            f"status code {h_err.response.status_code}{Color.END}"
         )
         return False
     except requests.ConnectionError:
         return False
 
 
-def lm(ch: chr) -> chr:
+def cnv_ch(o_chr: chr) -> chr:
     """
     Character decoding for MIC-E destination field
     used in mic_e_decoding
-    :param ch:
+    :param o_chr:
     :return: modified char
     """
-    if ch in ["K", "L", "Z"]:  # ambiguity
+    if o_chr in ["K", "L", "Z"]:  # ambiguity
         return chr(48)
-    elif ord(ch) > 79:
-        return chr(ord(ch)-32)
-    elif ord(ch) > 64:
-        return chr(ord(ch)-17)
-    return ch
+    if ord(o_chr) > 79:
+        return chr(ord(o_chr) - 32)
+    if ord(o_chr) > 64:
+        return chr(ord(o_chr) - 17)
+    return o_chr
 
 
 def mic_e_decode(route: str, m_i: bytes) -> str:
@@ -239,7 +237,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     # print("Message bits: {:03b}".format(mbits))
     if re.search(r"[A-K]", m_d[0:3]):
         msg_t = "cst"  # custom
-    msg = msg_id[mbits][msg_typ[msg_t]]
+    msg = MSG_ID[mbits][MSG_TYP[msg_t]]
 
     # Lat N/S, Lon E/W and Lon Offset byte 1 to 6
     d_lat = "S" if re.search(r"[0-L]", m_d[3]) else "N"
@@ -247,7 +245,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     d_lon = "E" if re.search(r"[0-L]", m_d[5]) else "W"
     ambiguity = (len(re.findall(r"[KLZ]", m_d)))
     # Latitude deg and min
-    lat = "".join([lm(ch) for ch in list(m_d)])
+    lat = "".join([cnv_ch(ch) for ch in list(m_d)])
     lat_deg = int(lat[0:2])
     lat_min = round(int(lat[2:4]) + int(lat[-2:])/100, 2)
 
@@ -260,29 +258,29 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     lon_min = round(lon_min + (m_i[3] - 28) / 100, 2)
 
     # Speed and Course bytes 5 to 7 info field
-    sp = (m_i[4] - 28)
-    sp = (sp - 80) * 10 if sp >= 80 else sp * 10 + int((m_i[5] - 28) / 10)
-    sp = sp - 800 if sp >= 800 else sp
-    dc = 100 * ((m_i[5] - 28) % 10) + m_i[6] - 28
-    dc = dc - 400 if dc >= 400 else dc
+    spd = (m_i[4] - 28)
+    spd = (spd - 80) * 10 if spd >= 80 else spd * 10 + int((m_i[5] - 28) / 10)
+    spd = spd - 800 if spd >= 800 else spd
+    crs = 100 * ((m_i[5] - 28) % 10) + m_i[6] - 28
+    crs = crs - 400 if crs >= 400 else crs
 
     # Symbol bytes 8 to 9 info field
-    sy = chr(m_i[7]) + chr(m_i[8])
+    symb = chr(m_i[7]) + chr(m_i[8])
 
     # Check for altitude or telemetry
     alt: int = 0
     if len(m_i) > 9:
         info = decode_ascii(m_i[9:])[1]
         # Check for altitude
-        m = re.search(r".{3}}", info)
-        if m:
-            alt = b91_decode(m.group()[:3]) - 10000
+        m_alt = re.search(r".{3}}", info)
+        if m_alt:
+            alt = b91_decode(m_alt.group()[:3]) - 10000
         if m_i[9] in [b"'", b"`", b'\x1d']:
             # todo decode telemetry data
             # "'" 5 HEX, "`" 2 HEX "\x1d" 5 binary
             info = "Telemetry data"
-    else:
-        info = ""
+        else:
+            info = ""
 
     decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
               f"{lon_deg} {lon_min}'{d_lon}, " \
@@ -290,16 +288,22 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
 
     if ambiguity > 0:
         decoded += f"Ambgty: {ambiguity} digits, "
-    if sp > 0:
-        decoded += f"Speed: {sp} knots, "
-    if dc > 0:
-        decoded += f"Course: {dc} deg, "
+    if spd > 0:
+        decoded += f"Speed: {spd} knots, "
+    if crs > 0:
+        decoded += f"Course: {crs} deg, "
     if alt > 0:
         decoded += f"Alt: {alt} m, "
     # decoded += f"Status: {info}"
     return decoded
 
+
 class Ygate:
+    """
+    Yaesu IGate class takes packets sent from Yaesu radio via
+    serial (data) interface and forwards them to the APRS
+    Internet system (APRS-IS)
+    """
 
     HOURLY = 3600.0
     FORMAT = "ascii"
@@ -311,17 +315,17 @@ class Ygate:
     LOC_CNT = 0  # number of local stns
 
     def __init__(
-        self,
-        USER="MYCALL",
-        SSID=10,
-        PASS=00000,
-        LAT=(14, 7.09, "N"),
-        LON=(120, 58.07, "E"),
-        ALT=(0.0, "m"),
-        SERIAL="/dev/ttyUSB0",
-        BCNTXT="IGate RF-IS 144.39 - 73",
-        BEACON=1200.0,
-        BLNTXT="IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
+            self,
+            USER="MYCALL",
+            SSID=10,
+            PASS=00000,
+            LAT=(14, 7.09, "N"),
+            LON=(120, 58.07, "E"),
+            ALT=(0.0, "m"),
+            SERIAL="/dev/ttyUSB0",
+            BCNTXT="IGate RF-IS 144.39 - 73",
+            BEACON=1200.0,
+            BLNTXT="IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
     ):
         """
         :param USER:   Your callsign with ssid (-10 for igate)
@@ -381,11 +385,11 @@ class Ygate:
                     f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
                 )
                 self.ser.close()
-                exit(0)
+                sys.exit(0)
         else:
             print(f"{loc_time} {Color.RED}No internet available{Color.END}")
             self.ser.close()
-            exit(0)
+            sys.exit(0)
         signal.signal(signal.SIGINT, self.signal_handler)
 
     def signal_handler(self, interupt_signal, frame):
@@ -397,15 +401,16 @@ class Ygate:
         """
         print("\r\nCtrl+C, exiting.")
         print(
-            "{:d}".format(self.p_gated + self.p_not_gated + self.p_inv_routing) + " packets received, "
-            + f"{self.p_gated} Packets gated "
-              f"{self.p_not_gated} Packets not gated, "
-              f"{self.p_inv_routing} invalid packets."
+            "{:d}".format(self.p_gated + self.p_not_gated
+                          + self.p_inv_routing)
+            + " packets received, {self.p_gated} Packets gated "
+            f"{self.p_not_gated} Packets not gated, "
+            f"{self.p_inv_routing} invalid packets."
         )
         print("List of unique call sign heard:")
         print(self.call_signs)
         self.ser.close()
-        os._exit(0)
+        sys.exit(0)
 
     def is_routing(self, p_str: str) -> bool:
         """
@@ -413,14 +418,13 @@ class Ygate:
         :param p_str: String to be checked
         :return: true if valid
         """
-        m = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
-        if m and m.pos == 0:
-            if m.group() not in self.call_signs:
+        val_call = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
+        if val_call and val_call.pos == 0:
+            if val_call.group() not in self.call_signs:
                 # todo to become part of logging
-                self.call_signs.append(m.group())
+                self.call_signs.append(val_call.group())
             return True
-        else:
-            return False
+        return False
 
     @property
     def aprs_con(self) -> bool:
@@ -429,7 +433,7 @@ class Ygate:
         :return: True or False depending on the success.
         """
         l_time = time.strftime("%H:%M:%S")
-        if self.sck is None or type(self.sck) is not classmethod:
+        if self.sck is None or not isinstance(self.sck):
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
             self.sck.settimeout(None)
         try:
@@ -456,15 +460,15 @@ class Ygate:
         print(f"{l_time} {Color.GREEN}{login}{Color.END}")
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             return True
-        elif (login.find("# aprsc") >= 0 or login.find("# jav") >= 0) \
-                and login.find("unverified") == -1:
+        if (login.find("# aprsc") >= 0 or login.find("# jav") >= 0) \
+            and login.find("unverified") == -1:
             # aprs server sends every 20 sec one comment line (#) when logged in
             return True
-        else:
-            print(
-                f"{l_time} {Color.RED}Login not successful. Check call sign and verification code.{Color.END}"
-            )
-            exit(0)
+        print(
+            f"{l_time} {Color.RED}Login not successful. "
+            f"Check call sign and verification code.{Color.END}"
+        )
+        return False
 
     def send_aprs(self, aprs_string: str) -> bool:
         """
@@ -472,15 +476,14 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
-        dtid = "[MSG ]" if re.search(r"::BLN", aprs_string) else "[POS ]"
+        dt_id = "[MSG ]" if re.search(r"::BLN", aprs_string) else "[POS ]"
         l_time = time.strftime("%H:%M:%S")
         try:
             if is_internet():
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} {dtid} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} {dt_id} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
-            else:
-                err = "No internet"
+            err = "No internet"
         except (TimeoutError, BrokenPipeError, OSError) as msg:
             err = msg.strerror
         if len(err) > 0:
@@ -490,13 +493,12 @@ class Ygate:
             time.sleep(2.0)
             if self.aprs_con:
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
-                print(f"{l_time} {dtid} {Color.BLUE}{aprs_string.strip()}{Color.END}")
+                print(f"{l_time} {dt_id} {Color.BLUE}{aprs_string.strip()}{Color.END}")
                 return True
-            else:
-                print(
-                    f"{l_time} {Color.YELLOW}Not sent: {Color.END}{aprs_string.strip()}"
-                )
-                return False
+        print(
+            f"{l_time} {Color.YELLOW}Not sent: {Color.END}{aprs_string.strip()}"
+        )
+        return False
 
     def send_my_position(self):
         """
@@ -512,11 +514,11 @@ class Ygate:
         """
         if self.p_gated > 0:
             # send statistics via bulletin
-            td = datetime.datetime.now() - self.start_datetime
+            time_on = datetime.datetime.now() - self.start_datetime
             p_tot = self.p_gated + self.p_not_gated + self.p_inv_routing
             n_calls = len(self.call_signs)
-            self.bulletin_txt = f"IGate up {td.days} days " \
-                f" {round(td.seconds/3600,1)} h - " \
+            self.bulletin_txt = f"IGate up {time_on.days} days " \
+                f" {round(time_on.seconds/3600,1)} h - " \
                 f"{p_tot} rcvd, {self.p_gated} gtd, " \
                 f"{n_calls} unique calls"
         bulletin = f"{self.user}>{self.VERS},TCPIP*::BLN1     :{self.bulletin_txt}\n"
@@ -579,10 +581,9 @@ class Ygate:
                 self.p_gated += 1
                 self.msg = ""
                 return True
-            else:
-                self.msg = "No network/internet, not gated"
-                self.p_not_gated += 1
-                return False
+            self.msg = "No network/internet, not gated"
+            self.p_not_gated += 1
+            return False
 
     def open_serial(self, serial_dev):
         """
@@ -600,26 +601,26 @@ class Ygate:
             )
             print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
-            exit(0)
+            sys.exit(0)
 
-    def get_data_type(self, pl: str) -> str:
+    def get_data_type(self, pay_ld: str) -> str:
         """
         Checs for data id and messages to own call sign
-        :param pl: payload
+        :param pay_ld: payload
         :return: message id
         """
         try:
-            dt = aprs_data_type[pl[0]]
+            d_type = APRS_DATA_TYPE[pay_ld[0]]
             # get target call for messages
-            m = re.search(r":\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}-?\d{0,2} {0,6}:", pl)
-            if (dt == "MSG " or dt == "3PRT") and m:
+            my_c = re.search(r":\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}-?\d{0,2} {0,6}:", pay_ld)
+            if d_type in ("MSG", "3PRT") and my_c:
                 # Check for own messages - remove ssid
-                call = re.search(r"\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}", m.group())
+                call = re.search(r"\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}", my_c.group())
                 if call and call.group() == self.call:
-                    dt = f"{Color.PURPLE}MSG!{Color.END}"
+                    d_type = f"{Color.PURPLE}MSG!{Color.END}"
         except KeyError:
-            dt = "    "
-        return dt
+            d_type = "    "
+        return d_type
 
     def start(self):
         """
@@ -677,5 +678,5 @@ class Ygate:
 
 
 if __name__ == "__main__":
-    igate = Ygate()
-    igate.start()
+    YGATE = Ygate()
+    YGATE.start()
