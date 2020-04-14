@@ -241,9 +241,9 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     msg = MSG_ID[mbits][MSG_TYP[msg_t]]
 
     # Lat N/S, Lon E/W and Lon Offset byte 1 to 6
-    d_lat = "S" if re.search(r"[0-L]", m_d[3]) else "N"
+    lat_d = "S" if re.search(r"[0-L]", m_d[3]) else "N"
     lon_o = 0 if re.search(r"[0-L]", m_d[4]) else 100
-    d_lon = "E" if re.search(r"[0-L]", m_d[5]) else "W"
+    lon_d = "E" if re.search(r"[0-L]", m_d[5]) else "W"
     ambiguity = (len(re.findall(r"[KLZ]", m_d)))
     # Latitude deg and min
     lat = "".join([cnv_ch(ch) for ch in list(m_d)])
@@ -282,9 +282,16 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
             info = "Telemetry data"
         else:
             info = ""
-
-    decoded = f"Pos: {lat_deg} {lat_min}'{d_lat}, " \
-              f"{lon_deg} {lon_min}'{d_lon}, " \
+    """
+    Values returned in decoded:
+        Position: lat_deg, lat_min, lat_d; Lon_deg, Lon_min, lon_d
+        Ambiguity: ambiguity
+        Speed: spd in knots
+        Course: crs in deg
+        Altitude: alt in m
+    """
+    decoded = f"Pos: {lat_deg} {lat_min}'{lat_d}, " \
+              f"{lon_deg} {lon_min}'{lon_d}, " \
               f"{msg}, "
 
     if ambiguity > 0:
@@ -311,49 +318,47 @@ class Ygate:
     FORMAT = "ascii"
     RANGE = 150  # Range filter for APRS-IS in km
     VERS = "APZ090"  # Software experimental vers 0.9.0
-    BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n",
+    BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n"
+    BAUD = 9600
 
     # todo: answer to ?IGATE? query with MSG_CNT and LOC_CNT
-    MSG_CNT = 0  # messages transmitted
-    LOC_CNT = 0  # number of local stns
 
     def __init__(
             self,
-            USER="MYCALL",
-            SSID=10,
-            PASS=00000,
-            LAT=(14, 7.09, "N"),
-            LON=(120, 58.07, "E"),
-            ALT=(0.0, "m"),
-            SERIAL="/dev/ttyUSB0",
-            BCNTXT="IGate RF-IS 144.39 - 73",
+            user="MYCALL",
+            ssid=10,
+            secret=00000,
+            latitude=(14, 7.09, "N"),
+            longitude=(120, 58.07, "E"),
+            altitude=(0.0, "m"),
+            ser="/dev/ttyUSB0",
+            bcntxt="IGate RF-IS 144.39 - 73"
     ):
         """
-        :param USER:   Your callsign with ssid (-10 for igate)
-        :param SSID:   SSID for the gateway
-        :param PASS:   Your aprs secret code
-        :param LAT:    Latitude
-        :param LON:    Longitude
-        :param ALT:    Altitude in ft or m, 0. if no altitude
-        :param SERIAL: Driver location for serial interface
+        :param user:   Your callsign with ssid (-10 for igate)
+        :param ssid:   SSID for the gateway
+        :param secret:   Your aprs secret code
+        :param latitude:    Latitude
+        :param longitude:    Longitude
+        :param altitude:    Altitude in ft or m, 0. if no altitude
+        :param ser: Driver location for serial interface
         :param BLNTXT: Beacon text
         """
-
-        self.call = USER
-        self.user = f"{USER}-{SSID}"
-        self.secret = f"{PASS}"
-        self.beacon_txt = BCNTXT
+        self.call = user
+        self.user = f"{user}-{ssid}"
+        self.secret = f"{secret}"
+        self.beacon_txt = bcntxt
         self.beacon_time = self.BEACON
-        self.bulletin_txt = f"{USER} {self.BLNTXT}"  # Bulletin
+        self.bulletin_txt = f"{user} {self.BLNTXT}"  # Bulletin
 
-        self.host = "rotate.aprs2.net"
-        self.port = 14580
-        self.pos_f = format_position(LON, LAT)
-        self.pos_c = compress_position(LON, LAT, ALT)
+        self.pos_f = format_position(longitude, latitude)
+        self.pos_c = compress_position(longitude, latitude, altitude)
+
         self.sck = None
         self.sock_file = None
         self.ser = None
 
+        # Statistics
         self.start_datetime = datetime.datetime.now()
         self.call_signs = []  # List of unique calls heard
         self.p_gated = 0  # number of gated packets
@@ -362,9 +367,6 @@ class Ygate:
 
         self.msg = ""  # Status messages
 
-        self.is_decode = True if "-d" in str(sys.argv) else False
-        self.is_receive = True if "-i" in str(sys.argv) else False
-
         print(
             f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
             f"IGgate started - Program by 9V1KG{Color.END}"
@@ -372,7 +374,7 @@ class Ygate:
         print(" " * 9 + f"Position: {self.pos_f}")
         print(" " * 9 + f"Position: {self.pos_c}")
         loc_time = time.strftime("%H:%M:%S")
-        self.open_serial(SERIAL)
+        self.open_serial(ser)
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.host}")
             if self.aprs_con:
@@ -415,10 +417,10 @@ class Ygate:
         """
         Check whether p_str is a valid routing packet, add unique call signs to list
         :param p_str: String to be checked
-        :return: true if valid
+        :return: true if valid p_str starts with a valid call sign
         """
-        val_call = re.search(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
-        if val_call and val_call.pos == 0:
+        val_call = re.match(r"\d?[a-zA-Z]{1,2}\d{1,4}[a-zA-Z]{1,4}", p_str)
+        if val_call:
             if val_call.group() not in self.call_signs:
                 # todo to become part of logging
                 self.call_signs.append(val_call.group())
@@ -591,7 +593,7 @@ class Ygate:
         """
         try:
             # open first usb serial port
-            self.ser = serial.Serial(serial_dev, 9600)
+            self.ser = serial.Serial(serial_dev, self.BAUD)
             print(" " * 9 + f"Serial port {self.ser.name} opened")
         except Exception as err:
             print(
@@ -612,7 +614,7 @@ class Ygate:
             d_type = APRS_DATA_TYPE[pay_ld[0]]
             # get target call for messages
             my_c = re.search(r":\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}-?\d{0,2} {0,6}:", pay_ld)
-            if d_type in ("MSG", "3PRT") and my_c:
+            if d_type in ("MSG ", "3PRT") and my_c:
                 # Check for own messages - remove ssid
                 call = re.search(r"\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}", my_c.group())
                 if call and call.group() == self.call:
@@ -627,7 +629,7 @@ class Ygate:
         :return: nil
         """
         while True:
-            if self.is_receive:  # -i as cmd line argument
+            if "-i" in str(sys.argv):  # -i as cmd line argument
                 self.aprsis_rx()
             b_read = self.ser.read_until()
             res = decode_ascii(b_read)
@@ -654,7 +656,7 @@ class Ygate:
                             f"{localtime} [{data_type}] {routing}{payload}"
                         )
                         # Print decoded MIC-E data
-                        if data_type == "MICE" and self.is_decode:
+                        if data_type == "MICE" and "-d" in str(sys.argv):
                             print(16 * " " + mic_e_decode(routing, b_read))
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
