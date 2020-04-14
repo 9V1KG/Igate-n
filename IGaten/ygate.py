@@ -404,7 +404,7 @@ class Ygate:
         print(
             "{:d}".format(self.p_gated + self.p_not_gated
                           + self.p_inv_routing)
-            + " packets received, {self.p_gated} Packets gated "
+            + f" packets received, {self.p_gated} Packets gated "
             f"{self.p_not_gated} Packets not gated, "
             f"{self.p_inv_routing} invalid packets."
         )
@@ -434,7 +434,7 @@ class Ygate:
         :return: True or False depending on the success.
         """
         l_time = time.strftime("%H:%M:%S")
-        if self.sck is None or not isinstance(self.sck):
+        if self.sck is None or not isinstance(self.sck, classmethod):
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
             self.sck.settimeout(None)
         try:
