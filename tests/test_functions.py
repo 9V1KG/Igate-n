@@ -88,12 +88,12 @@ class TestFunctions(TestCase):
         self.assertEqual(res, "/3,1nQ-<y#C)t")
 
     def test_lm(self):
-        self.assertEqual(IGaten.lm("0"),"0")
-        self.assertEqual(IGaten.lm("A"),"0")
-        self.assertEqual(IGaten.lm("P"),"0")
-        self.assertEqual(IGaten.lm("K"),"0")
-        self.assertEqual(IGaten.lm("L"),"0")
-        self.assertEqual(IGaten.lm("Z"),"0")
+        self.assertEqual(IGaten.cnv_ch("0"), "0")
+        self.assertEqual(IGaten.cnv_ch("A"), "0")
+        self.assertEqual(IGaten.cnv_ch("P"), "0")
+        self.assertEqual(IGaten.cnv_ch("K"), "0")
+        self.assertEqual(IGaten.cnv_ch("L"), "0")
+        self.assertEqual(IGaten.cnv_ch("Z"), "0")
 
     def test_mic_e_decode(self):
         self.assertEqual(IGaten.mic_e_decode(

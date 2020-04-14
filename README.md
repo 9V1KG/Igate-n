@@ -17,7 +17,7 @@ on Windows too
 - Runs under Python 3 (tested with 3.7 and 3.8)
 - When started, checks for serial connection
 - Command line option -d to show Mic-E decoded Info
-- Command line option -i to show frames receievd from APRS-IS 
+- Command line option -i to show frames received from APRS-IS 
 - Checks and recovers from lost network/internet connection
 - Beacon of your position and altitude in compressed format
 - Hourly bulletin showing up-time, received/gated packets and unique calls
@@ -38,9 +38,7 @@ Please modify the following parameter in `ygaten.py` the according to your requi
              "/dev/tty.usbserial-14110", for Linux (Raspberry) 
              "/dev/ttyUSB0". For a Windows PC it will be "COM1:"
              (not tested).
-     BCNTXT: Text of the beacon. The beacon will be sent every 
-     BEACON: seconds
-     BLNTXT: Bulletin text, sent hourly
+     BCNTXT: Text of the beacon. The beacon will be sent every 20 minutes
 ## Radio Setup FTM-400
     Setup -> APRS -> (5) APRS Modem -> ON
     Setup -> DATA -> (1) COM PORT SETTINGS

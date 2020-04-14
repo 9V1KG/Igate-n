@@ -1,6 +1,8 @@
-# Main program
+"""
+    Yaesu Gate Main Program
+"""
 from IGaten import Ygate
 
 if __name__ == "__main__":
-    yg = Ygate()
-    yg.start()
+    YGATE = Ygate()
+    YGATE.start()
