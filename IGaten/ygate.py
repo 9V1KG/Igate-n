@@ -10,7 +10,7 @@
     DU3TW (M0FGC)
     Slight mods
 
-    Version 2020-04-14
+    Version 2020-04-15
 """
 import sys
 import os
@@ -199,7 +199,7 @@ def cnv_ch(o_chr: chr) -> chr:
     """
     Character decoding for MIC-E destination field
     used in mic_e_decoding
-    :param o_chr:
+    :param o_chr: original char
     :return: modified char
     """
     if o_chr in ["K", "L", "Z"]:  # ambiguity
@@ -284,11 +284,12 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
             info = ""
     """
     Values returned in decoded:
-        Position: lat_deg, lat_min, lat_d; Lon_deg, Lon_min, lon_d
+        Position:  lat_deg, lat_min, lat_d; 
+                   Lon_deg, lon_min, lon_d
         Ambiguity: ambiguity
-        Speed: spd in knots
-        Course: crs in deg
-        Altitude: alt in m
+        Speed:     spd in knots
+        Course:    crs in deg
+        Altitude:  alt in m
     """
     decoded = f"Pos: {lat_deg} {lat_min}'{lat_d}, " \
               f"{lon_deg} {lon_min}'{lon_d}, " \
@@ -320,8 +321,12 @@ class Ygate:
     VERS = "APZ090"  # Software experimental vers 0.9.0
     BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n"
     BAUD = 9600
+    HOST = "rotate.aprs2.net"
+    PORT = 14580
 
     # todo: answer to ?IGATE? query with MSG_CNT and LOC_CNT
+    # todo: change latitude, longitude, altitude to named tuple
+    # todo: change user, ssid, secret to named tuple
 
     def __init__(
             self,
@@ -351,12 +356,13 @@ class Ygate:
         self.beacon_time = self.BEACON
         self.bulletin_txt = f"{user} {self.BLNTXT}"  # Bulletin
 
+        self.ser = ser
+
         self.pos_f = format_position(longitude, latitude)
         self.pos_c = compress_position(longitude, latitude, altitude)
 
         self.sck = None
         self.sock_file = None
-        self.ser = None
 
         # Statistics
         self.start_datetime = datetime.datetime.now()
@@ -367,31 +373,6 @@ class Ygate:
 
         self.msg = ""  # Status messages
 
-        print(
-            f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
-            f"IGgate started - Program by 9V1KG{Color.END}"
-        )
-        print(" " * 9 + f"Position: {self.pos_f}")
-        print(" " * 9 + f"Position: {self.pos_c}")
-        loc_time = time.strftime("%H:%M:%S")
-        self.open_serial(ser)
-        if is_internet():  # check internet connection
-            print(f"{loc_time} Logging in to {self.host}")
-            if self.aprs_con:
-                self.send_bulletin()
-                time.sleep(5.)  # wait 5 sec before sending beacon
-                self.send_my_position()
-            else:
-                print(
-                    f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
-                )
-                self.ser.close()
-                sys.exit(0)
-        else:
-            print(f"{loc_time} {Color.RED}No internet available{Color.END}")
-            self.ser.close()
-            sys.exit(0)
-        signal.signal(signal.SIGINT, self.signal_handler)
 
     def signal_handler(self, interupt_signal, frame):
         """
@@ -438,7 +419,7 @@ class Ygate:
             self.sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # open socket
             self.sck.settimeout(None)
         try:
-            self.sck.connect((self.host, self.port))
+            self.sck.connect((self.HOST, self.PORT))
         except (OSError, TimeoutError) as msg:
             print(
                 f"{l_time} {Color.RED}Unable to connect to APRS-IS server.{Color.END} {msg}"
@@ -586,15 +567,16 @@ class Ygate:
             self.p_not_gated += 1
             return False
 
-    def open_serial(self, serial_dev):
+    def open_serial(self, serial_dev) -> bool:
         """
         Opens serial port with 9600 Bd
-        :return: exit program when serial could not be opened
+        :return: True when serial could be opened
         """
         try:
             # open first usb serial port
             self.ser = serial.Serial(serial_dev, self.BAUD)
             print(" " * 9 + f"Serial port {self.ser.name} opened")
+            return True
         except Exception as err:
             print(
                 " " * 9
@@ -602,7 +584,7 @@ class Ygate:
             )
             print(" " * 9 + f"{Color.RED}Check connection and driver name{Color.END}")
             print(" " * 9 + f"{Color.RED}Error {str(err)}{Color.END}")
-            sys.exit(0)
+            return False
 
     def get_data_type(self, pay_ld: str) -> str:
         """
@@ -623,11 +605,48 @@ class Ygate:
             d_type = "    "
         return d_type
 
+    def start_up(self):
+        """
+        Opens serial port and internet connection
+        :return: None
+        """
+        print(
+            f"{Color.GREEN}{(str(self.start_datetime).split('.'))[0]} {self.user} "
+            f"IGgate started - Program by 9V1KG{Color.END}"
+        )
+        print(" " * 9 + f"Position: {self.pos_f}")
+        print(" " * 9 + f"Compressed Position: {self.pos_c}")
+        loc_time = time.strftime("%H:%M:%S")
+        if not self.open_serial(self.ser):
+            sys.exit(1)
+        if is_internet():  # check internet connection
+            print(f"{loc_time} Logging in to {self.HOST}")
+            if self.aprs_con:
+                self.send_bulletin()
+                time.sleep(5.)  # wait 5 sec before sending beacon
+                self.send_my_position()
+            else:
+                print(
+                    f"{loc_time} {Color.RED}Cannot establish connection to APRS server{Color.END}"
+                )
+                if self.ser:
+                    self.ser.close()
+                sys.exit(1)
+        else:
+            print(f"{loc_time} {Color.RED}No internet available{Color.END}")
+            if self.ser:
+                self.ser.close()
+            sys.exit(1)
+
+
     def start(self):
         """
         Starts Igate and runs in loop until terminated with Ctrl C
         :return: nil
         """
+        signal.signal(signal.SIGINT, self.signal_handler)
+        self.start_up()
+
         while True:
             if "-i" in str(sys.argv):  # -i as cmd line argument
                 self.aprsis_rx()

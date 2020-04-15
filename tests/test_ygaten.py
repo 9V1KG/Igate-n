@@ -13,6 +13,7 @@ from IGaten.ygate import Ygate
 
 
 class TestYGate(TestCase):
+
     def setUp(self) -> None:
         self.lcl_ygate = Ygate()
 
@@ -27,17 +28,14 @@ class TestYGate(TestCase):
             IGaten.format_position((14, 8.09, "N"), (119, 55.07, "E")),
             "11955.07E/01408.09N#",
         )
-
         self.assertEqual(
             IGaten.format_position((14, 8.09, "S"), (119, 55.07, "E")),
             "11955.07E/01408.09S#",
         )
-
         self.assertEqual(
             IGaten.format_position((14, 8.09, "N"), (119, 55.07, "W")),
             "11955.07W/01408.09N#",
         )
-
         self.assertEqual(
             IGaten.format_position((14, 8.09, "S"), (119, 55.07, "W")),
             "11955.07W/01408.09S#",
@@ -50,6 +48,15 @@ class TestYGate(TestCase):
             IGaten.format_position((14, 78.09, "S"), (119, 55.07, "W")),
             "11955.07W/01478.09S#",
         )
+
+    @patch("IGaten.Ygate.check_routing")
+    def test_check_routing(self, mock_check_routing):
+        mock_check_routing.return_value = True
+        pstr = (
+            "DY1P>APWW10,ARISS,RS0ISS,WIDE1-1,WIDE2-1:}DW4TIM>APWW10,TCPIP,DY1P*",
+            "}DW4TIM>APWW10,TCPIP,DY1P*:@124210h1309.14N/12345.27E,APRSIS32 de DW4TIM")
+        self.assertEqual(
+            self.lcl_ygate.check_routing(pstr), True)
 
     @patch("IGaten.Ygate.is_routing")
     def test_is_routing(self, mock_is_routing):
@@ -82,3 +89,12 @@ class TestYGate(TestCase):
     def test_open_serial(self, mock_open_serial):
         mock_open_serial.return_value = True
         self.assertEqual(self.lcl_ygate.open_serial(), True)
+
+    @patch("IGaten.Ygate.get_data_type")
+    def test_get_data_type(self, mock_get_data_type):
+        pld = ":DY1P APRS 10 Watts RF-IS-RF Digipeater"
+        mock_get_data_type.return_value = "MSG "
+        self.assertEqual(self.lcl_ygate.get_data_type(pld), "MSG ")
+        pld = ":DU1KG-10 APRS 10 Watts RF-IS-RF Digipeater"
+        mock_get_data_type.return_value = '\033[1;35;48mMSG!\033[1;37;0m'
+        self.assertEqual(self.lcl_ygate.get_data_type(pld), '\033[1;35;48mMSG!\033[1;37;0m')
