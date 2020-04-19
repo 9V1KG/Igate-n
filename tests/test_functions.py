@@ -74,17 +74,17 @@ class TestFunctions(TestCase):
         """
         lon1 = (10.11, 20.22, "E")
         lat2 = (54.11, 2.22, "N")
-        res = IGaten.compress_position(lon1, lat2)
+        res = IGaten.compress_position(lat2, lon1)
         self.assertEqual(res, "/3,6\\Q-:T#   ")
-        res = IGaten.compress_position(lon1, lat2, alt=(150, "m"))
+        res = IGaten.compress_position(lat2, lon1, alt=(150, "m"))
         self.assertEqual(res, "/3,6\\Q-:T#C)t")
 
         # As location is calculated to a meter ... adding more accuract in the DD.MMMMM input should change the output
         lon1 = (10.111111, 20.222222, "E")
         lat2 = (54.111111, 2.2222222, "N")
-        res = IGaten.compress_position(lon1, lat2)
+        res = IGaten.compress_position(lat2, lon1)
         self.assertEqual(res, "/3,1nQ-<y#   ")
-        res = IGaten.compress_position(lon1, lat2, alt=(150, "m"))
+        res = IGaten.compress_position(lat2, lon1, alt=(150, "m"))
         self.assertEqual(res, "/3,1nQ-<y#C)t")
 
     def test_cnv_ch(self):
@@ -108,3 +108,11 @@ class TestFunctions(TestCase):
         self.assertEqual(IGaten.mic_e_decode(
             "DU1KG-1>Q4PWQ0,DY1P,WIDE1*,WIDE2-1,qAR,DU1KG-10:", b''),
             "Invalid information field")
+
+    def test_print_wrap(self):
+        txt = "00:00:00 [MSG] The quick brown fox jumps over the lazy dog. "
+        IGaten.print_wrap(txt)
+        txt = "00:00:00 [MSG] The quick brown fox jumps over the lazy dog. " \
+              "The quick brown fox jumps over the lazy dog. " \
+              "The quick brown fox jumps over the lazy dog. "
+        IGaten.print_wrap(txt)

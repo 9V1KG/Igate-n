@@ -22,23 +22,27 @@ on Windows too
 - Beacon of your position and altitude in compressed format
 - Hourly bulletin showing up-time, received/gated packets and unique calls
 - Checks packet payload decoding and highlight invalid bytes
+- Displays APRS data type POS, MSG, MICE, WX etc.
+- Replies to queries ?APRSP, ?APRSD, ?APRSS, ?IGATE?
 - Colored terminal text output
 
 ## User Settings
-Please modify the following parameter in `ygaten.py` the according to your requirements:
+Please modify the following parameter in `ygaten.py` according 
+to your requirements:
 
-     USER:   your call sign, e.g. DU1KG
-     SSID:   ssid for the gateway (usually 10)
-     PASS:   your APRS 5-digit pass code
-     LAT:    Latitude and 
-     LON:    Longitude of your position in the format
-             (degrees, minutes as decimal number, N/S/E/W)
-     ALT:    Altitude in meter "m" or feet "ft", (0.,"m") if none
-     SERIAL: The driver for your com port. For MacOS it is 
-             "/dev/tty.usbserial-14110", for Linux (Raspberry) 
-             "/dev/ttyUSB0". For a Windows PC it will be "COM1:"
-             (not tested).
-     BCNTXT: Text of the beacon. The beacon will be sent every 20 minutes
+     Class parameter:
+     user:      your call sign, e.g. DU1KG
+     ssid:      ssid for the gateway (default 10)
+     secret:    your APRS 5-digit pass code
+     latitude:  Latitude and 
+     longitude: Longitude of your position in the format
+                (degrees, minutes as decimal number, N/S/E/W)
+     altitude:  Altitude in meter "m" or feet "ft", (0.,"m") if none
+     
+     CLASS CONSTANTS
+     RANGE:  Filter range in km (default 150) 
+     SERIAL: Serial driver (default "/dev/ttyUSB0")
+
 ## Radio Setup FTM-400
     Setup -> APRS -> (5) APRS Modem -> ON
     Setup -> DATA -> (1) COM PORT SETTINGS
