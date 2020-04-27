@@ -67,6 +67,33 @@ class TestFunctions(TestCase):
             IGaten.is_internet("www.this_site_does_not_exists.com", 20), True
         )
 
+    def test_format_position(self):
+        self.assertEqual(
+            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "E")),
+            "1408.09N/11955.07E#"
+        )
+        self.assertEqual(
+            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "E")),
+            "1408.09S/11955.07E#"
+        )
+        self.assertEqual(
+            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "W")),
+            "1408.09N/11955.07W#"
+        )
+        self.assertEqual(
+            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "W")),
+            "1408.09S/11955.07W#"
+        )
+        self.assertEqual(
+            IGaten.format_position((90, 59.99, "N"), (179, 59.99, "W")),
+            "\033[1;31;48mInvalid position input\033[1;37;0m"
+        )
+
+        self.assertEqual(
+            IGaten.format_position((14, 98.09, "W"), (119, 55.07, "N")),
+            "\033[1;31;48mInvalid position input\033[1;37;0m"
+        )
+
     def test_compress_position(self):
         """
         Check the position compression

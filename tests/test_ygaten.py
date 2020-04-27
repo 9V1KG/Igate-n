@@ -23,31 +23,6 @@ class TestYGate(TestCase):
     def test_is_class(self):
         self.assertIsInstance(self.lcl_ygate, Ygate)
 
-    def test_format_position(self):
-        self.assertEqual(
-            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "E")),
-            "11955.07E/01408.09N#",
-        )
-        self.assertEqual(
-            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "E")),
-            "11955.07E/01408.09S#",
-        )
-        self.assertEqual(
-            IGaten.format_position((14, 8.09, "N"), (119, 55.07, "W")),
-            "11955.07W/01408.09N#",
-        )
-        self.assertEqual(
-            IGaten.format_position((14, 8.09, "S"), (119, 55.07, "W")),
-            "11955.07W/01408.09S#",
-        )
-
-        # This test should fail ... but there is no validation in the format position
-        # Method
-        # todo Validate input to format position
-        self.assertEqual(
-            IGaten.format_position((14, 78.09, "S"), (119, 55.07, "W")),
-            "11955.07W/01478.09S#",
-        )
 
     @patch("IGaten.Ygate.check_routing")
     def test_check_routing(self, mock_check_routing):
@@ -96,5 +71,5 @@ class TestYGate(TestCase):
         mock_get_data_type.return_value = "MSG "
         self.assertEqual(self.lcl_ygate.get_data_type(pld), "MSG ")
         pld = ":DU1KG-10 APRS 10 Watts RF-IS-RF Digipeater"
-        mock_get_data_type.return_value = '\033[1;35;48mMSG!\033[1;37;0m'
-        self.assertEqual(self.lcl_ygate.get_data_type(pld), '\033[1;35;48mMSG!\033[1;37;0m')
+        mock_get_data_type.return_value = '\033[1;35;48mMSG \033[1;37;0m'
+        self.assertEqual(self.lcl_ygate.get_data_type(pld), '\033[1;35;48mMSG \033[1;37;0m')
