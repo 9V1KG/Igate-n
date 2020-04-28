@@ -759,8 +759,8 @@ class Ygate:
                 # routing starts with a valid call sign and contains " [date time] <UI *>"
                 if self.check_routing(routing, payload):  # can be routed
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user.my_call}-{self.user.ssid}:", routing
-                    )  # replace "[...]<...>" with ",qAR,Call:"
+                        r" \[.*\] <UI.*>:", f",qAO,{self.user.my_call}-{self.user.ssid}:", routing
+                    )  # replace "[...]<...>" with ",qAO,Call:"
                     packet = bytes(routing, self.FORMAT) + b_p2  # byte string
                     if self.do_gating(packet):
                         print_wrap(f"{localtime} [{data_type}] {routing}{payload}")
