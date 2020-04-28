@@ -229,7 +229,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     :return: str with decoded information or empty
     """
     # Check input
-    if chr(m_i[0]) not in ["'", "`"]:
+    if len(m_i) == 0 or chr(m_i[0]) not in ["'", "`"]:
         return ""
     m_d = re.search(r">([A-Z,\d]{6,7}),", route)  # extract destination
     if not m_d:
