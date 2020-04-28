@@ -487,7 +487,9 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
-        dt_id = APRS_DATA_TYPE[aprs_string.split(":")[1][0]]
+        # dt_id = APRS_DATA_TYPE[aprs_string.split(":")[1][0]]
+        # todo: general - statement above does not work
+        dt_id = "POS " if ":=" in aprs_string else "STAT"
         l_time = time.strftime("%H:%M:%S")
         if is_internet():
             try:
