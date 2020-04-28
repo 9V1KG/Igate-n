@@ -753,7 +753,7 @@ class Ygate:
                 print_wrap(
                     f"{localtime} [INV ] {COL.yellow}Invalid routing: {COL.end} {a_p1[1]}"
                 )
-                logging.warning("[INV ] Invalid routing: %s %s", routing, payload)
+                logging.warning("[INV ] Invalid routing: %s%s", routing, payload)
                 self.pstat[2] += 1
             elif self.is_routing(routing) and re.search(r" \[.*\] <UI.*>:", routing):
                 # routing starts with a valid call sign and contains " [date time] <UI *>"
@@ -764,17 +764,17 @@ class Ygate:
                     packet = bytes(routing, self.FORMAT) + b_p2  # byte string
                     if self.do_gating(packet):
                         print_wrap(f"{localtime} [{data_type}] {routing}{payload}")
-                        logging.info("[%s] %s %s", data_type, routing, payload)
+                        logging.info("[%s] %s%s", data_type, routing, payload)
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                        logging.warning("[%s] %s: %s %s", data_type, self.msg, routing, payload)
+                        logging.warning("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                         print_wrap(
                             f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                             f"{routing}{payload}"
                         )
                 else:  # no routing to internet
                     routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                    logging.info("[%s] %s: %s %s", data_type, self.msg, routing, payload)
+                    logging.info("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                     print_wrap(
                         f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                         f"{routing}{payload}"
@@ -784,7 +784,7 @@ class Ygate:
                     logging.info("       %s", mic_e)
             elif len(routing) > 0:  # no invalid char in routing, but not to be routed
                 routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                logging.warning("[%s] Invalid routing: %s %s", data_type, routing, payload)
+                logging.warning("[%s] Invalid routing: %s%s", data_type, routing, payload)
                 print_wrap(
                     f"{localtime} [{data_type}] {COL.yellow}"
                     f"Invalid routing:{COL.end} {routing} {payload}")
