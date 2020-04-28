@@ -10,7 +10,7 @@
     DU3TW (M0FGC)
     Slight mods
 
-    Version 2020-04-27
+    Version 2020-04-28
 """
 
 import sys
@@ -32,6 +32,7 @@ Col = namedtuple(
     'color',
     ['red', 'green', 'yellow', 'blue', 'purple', 'cyan', 'bold', 'end']
 )
+
 COL = Col(red="\033[1;31;48m",
           green="\033[1;32;48m",
           yellow="\033[1;33;48m",
@@ -83,7 +84,7 @@ MSG_ID = {
 
 def format_position(lat: tuple, lon: tuple) -> str:
     """
-    # Formatted uncompressed APRS Position String
+    # Format uncompressed APRS Position String
     :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
@@ -228,15 +229,14 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     :return: str with decoded information or empty
     """
     # Check input
-    if chr(m_i[0]) not in ["'", "`"]:
+    if len(m_i) == 0 or chr(m_i[0]) not in ["'", "`"]:
         return ""
     m_d = re.search(r">([A-Z,\d]{6,7}),", route)  # extract destination
     if not m_d:
         return ""
     m_d = m_d.group(1)
-    # Check validity of input parameters
     if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
-        return "Invalid destination field"
+        return ""
     if not re.match(
             r"[\x1c\x1d`'][&-~,\x7f][&-a][\x1c-~,\x7f]{5,}", m_i.decode("ascii")
     ):
@@ -488,7 +488,8 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
-        dt_id = APRS_DATA_TYPE[aprs_string.split(":")[1][0]]
+        dt_id = aprs_string.split(":")
+        dt_id = APRS_DATA_TYPE[dt_id[1][0] if len(dt_id[1]) > 0 else ":"]
         l_time = time.strftime("%H:%M:%S")
         if is_internet():
             try:
@@ -685,8 +686,7 @@ class Ygate:
                 d_type = "BLN "
         return d_type
 
-    # todo: move param from __init___ here
-    def start_up(self,):
+    def start_up(self):
         """
         Startup of IGate: opens serial port and internet connection
         Login to APRS server and send bulletin and beacon
@@ -753,28 +753,28 @@ class Ygate:
                 print_wrap(
                     f"{localtime} [INV ] {COL.yellow}Invalid routing: {COL.end} {a_p1[1]}"
                 )
-                logging.warning("[INV ] Invalid routing: %s %s", routing, payload)
+                logging.warning("[INV ] Invalid routing: %s%s", routing, payload)
                 self.pstat[2] += 1
             elif self.is_routing(routing) and re.search(r" \[.*\] <UI.*>:", routing):
                 # routing starts with a valid call sign and contains " [date time] <UI *>"
                 if self.check_routing(routing, payload):  # can be routed
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user.my_call}-{self.user.ssid}:", routing
-                    )  # replace "[...]<...>" with ",qAR,Call:"
+                        r" \[.*\] <UI.*>:", f",qAO,{self.user.my_call}-{self.user.ssid}:", routing
+                    )  # replace "[...]<...>" with ",qAO,Call:"
                     packet = bytes(routing, self.FORMAT) + b_p2  # byte string
                     if self.do_gating(packet):
                         print_wrap(f"{localtime} [{data_type}] {routing}{payload}")
-                        logging.info("[%s] %s %s", data_type, routing, payload)
+                        logging.info("[%s] %s%s", data_type, routing, payload)
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                        logging.warning("[%s] %s: %s %s", data_type, self.msg, routing, payload)
+                        logging.warning("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                         print_wrap(
                             f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                             f"{routing}{payload}"
                         )
                 else:  # no routing to internet
                     routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                    logging.info("[%s] %s: %s %s", data_type, self.msg, routing, payload)
+                    logging.info("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                     print_wrap(
                         f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                         f"{routing}{payload}"
@@ -784,7 +784,7 @@ class Ygate:
                     logging.info("       %s", mic_e)
             elif len(routing) > 0:  # no invalid char in routing, but not to be routed
                 routing = re.sub(r" \[.*\] <UI.*>", "", routing)
-                logging.warning("[%s] Invalid routing: %s %s", data_type, routing, payload)
+                logging.warning("[%s] Invalid routing: %s%s", data_type, routing, payload)
                 print_wrap(
                     f"{localtime} [{data_type}] {COL.yellow}"
                     f"Invalid routing:{COL.end} {routing} {payload}")

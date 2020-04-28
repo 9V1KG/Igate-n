@@ -127,14 +127,14 @@ class TestFunctions(TestCase):
         self.assertEqual(IGaten.mic_e_decode(
             " ",
             b'`0V l\x1c -/`":-}435.350MHz DU1KG home 73 Klaus_%'),
-            "Invalid destination field")
+            "")
         self.assertEqual(IGaten.mic_e_decode(
             "DU1KG-1>Q4PWQ0,DY1P,WIDE1*,WIDE2-1,qAR,DU1KG-10:",
             b'`0V l \x1c-/`":-}435.350MHz DU1KG home 73 Klaus_%'),
             "Pos: 14 7.1'N, 120 58.04'E, In Service, Alt: 568 m, ")
         self.assertEqual(IGaten.mic_e_decode(
             "DU1KG-1>Q4PWQ0,DY1P,WIDE1*,WIDE2-1,qAR,DU1KG-10:", b''),
-            "Invalid information field")
+            "")
 
     def test_print_wrap(self):
         txt = "00:00:00 [MSG] The quick brown fox jumps over the lazy dog. "
