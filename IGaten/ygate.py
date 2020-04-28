@@ -228,7 +228,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     :return: str with decoded information or empty
     """
     # Check input
-    if chr(m_i[0]) not in ["'","`"]:
+    if chr(m_i[0]) not in ["'", "`"]:
         return ""
     m_d = re.search(r">([A-Z,\d]{6,7}),", route)  # extract destination
     if not m_d:
@@ -391,6 +391,7 @@ class Ygate:
         self.ser = None
         self.sck = None
         self.sock_file = None
+
 
     def signal_handler(self, interupt_signal, frame):
         """
