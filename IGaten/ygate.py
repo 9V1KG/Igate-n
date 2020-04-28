@@ -234,9 +234,8 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     if not m_d:
         return ""
     m_d = m_d.group(1)
-    # Check validity of input parameters
     if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
-        return "Invalid destination field"
+        return ""
     if not re.match(
             r"[\x1c\x1d`'][&-~,\x7f][&-a][\x1c-~,\x7f]{5,}", m_i.decode("ascii")
     ):
@@ -685,7 +684,6 @@ class Ygate:
                 d_type = "BLN "
         return d_type
 
-    # todo: move param from __init___ here
     def start_up(self,):
         """
         Startup of IGate: opens serial port and internet connection
