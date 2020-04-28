@@ -10,7 +10,7 @@
     DU3TW (M0FGC)
     Slight mods
 
-    Version 2020-04-27
+    Version 2020-04-28
 """
 
 import sys
@@ -32,6 +32,7 @@ Col = namedtuple(
     'color',
     ['red', 'green', 'yellow', 'blue', 'purple', 'cyan', 'bold', 'end']
 )
+
 COL = Col(red="\033[1;31;48m",
           green="\033[1;32;48m",
           yellow="\033[1;33;48m",
@@ -83,7 +84,7 @@ MSG_ID = {
 
 def format_position(lat: tuple, lon: tuple) -> str:
     """
-    # Formatted uncompressed APRS Position String
+    # Format uncompressed APRS Position String
     :param lon: Tuple of Degree, Decimal-Minutes, "N or S"
     :param lat: Tuple of Degree, Decimal-Minutes , "E or W"
     :return: Aprs formatted string
@@ -487,9 +488,8 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
-        # dt_id = APRS_DATA_TYPE[aprs_string.split(":")[1][0]]
-        # todo: general - statement above does not work
-        dt_id = "POS " if ":=" in aprs_string else "STAT"
+        dt_id = aprs_string.split(":")
+        dt_id = APRS_DATA_TYPE[dt_id[1][0] if len(dt_id[1]) > 0 else ":"]
         l_time = time.strftime("%H:%M:%S")
         if is_internet():
             try:
@@ -686,7 +686,7 @@ class Ygate:
                 d_type = "BLN "
         return d_type
 
-    def start_up(self,):
+    def start_up(self):
         """
         Startup of IGate: opens serial port and internet connection
         Login to APRS server and send bulletin and beacon
