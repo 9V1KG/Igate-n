@@ -20,11 +20,12 @@ on Windows too
 - Command line option -i to show frames received from APRS-IS 
 - Checks and recovers from lost network/internet connection
 - Beacon of your position and altitude in compressed format
-- Hourly bulletin showing up-time, received/gated packets and unique calls
+- Hourly status showing up-time, received/gated packets and unique calls
 - Checks packet payload decoding and highlight invalid bytes
 - Displays APRS data type POS, MSG, MICE, WX etc.
 - Replies to queries ?APRSP, ?APRSD, ?APRSS, ?IGATE?
 - Colored terminal text output
+- All output data logged into a log file ygate.log
 
 ## User Settings
 Please modify the following parameter in `ygaten.py` according 

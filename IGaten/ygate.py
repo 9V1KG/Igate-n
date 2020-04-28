@@ -10,7 +10,7 @@
     DU3TW (M0FGC)
     Slight mods
 
-    Version 2020-04-21
+    Version 2020-04-27
 """
 
 import sys
@@ -23,6 +23,7 @@ import datetime
 import time
 import math
 import textwrap
+import logging
 from collections import namedtuple
 import serial
 import requests
@@ -199,6 +200,7 @@ def is_internet(url: str = "http://www.google.com/", timeout: int = 30) -> bool:
         )
         return False
     except requests.ConnectionError:
+        logging.warning("request.ConnectionError")
         return False
 
 
@@ -223,12 +225,14 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     Decodes APRS MIC-E encoded data
     :param route: routing field
     :param m_i: payload bytes
-    :return: str with decoded information
+    :return: str with decoded information or empty
     """
-    # Check input validity
+    # Check input
+    if chr(m_i[0]) not in ["'","`"]:
+        return ""
     m_d = re.search(r">([A-Z,\d]{6,7}),", route)  # extract destination
     if not m_d:
-        return "Invalid destination field"
+        return ""
     m_d = m_d.group(1)
     # Check validity of input parameters
     if not re.search(r"[0-9A-Z]{3}[0-9L-Z]{3,4}$", m_d):
@@ -236,7 +240,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     if not re.match(
             r"[\x1c\x1d`'][&-~,\x7f][&-a][\x1c-~,\x7f]{5,}", m_i.decode("ascii")
     ):
-        return "Invalid information field"
+        return ""
 
     # Message type first three bytes destination field
     msg_t: str = "std"
@@ -289,7 +293,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
             # "'" 5 HEX, "`" 2 HEX "\x1d" 5 binary
             # info = "Telemetry data"
             pass
-    """
+        """
         Values returned in decoded:
         Position:  lat_deg, lat_min, lat_d; 
                    lon_deg, lon_min, lon_d
@@ -299,7 +303,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
         Speed:     spd in knots
         Course:    crs in deg
         Altitude:  alt in m
-    """
+        """
     decoded = f"Pos: {lat_deg} {lat_min}'{lat_d}, " \
               f"{lon_deg} {lon_min}'{lon_d}, " \
               f"{msg}, "
@@ -334,19 +338,19 @@ class Ygate:
     serial (data) interface and forwards them to the APRS
     Internet system (APRS-IS)
     """
-
     RANGE = 150  # Range filter for APRS-IS in km
     SERIAL = "/dev/ttyUSB0"
     BAUD = 9600
-    BCNTXT = "IGate RF-IS 144.39 - 73"
-    BLNTXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n"
+    BCNTXT = "IGate RF-IS 144.1 - 73"
+    STATUS_TXT = "IGate is up - RF-IS for FTM-400: https://github.com/9V1KG/Igate-n"
     HOST = "rotate.aprs2.net"
     PORT = 14580
     HOURLY = 3600.0
     BEACON = 1200.0  # beacon every 20 min
     FORMAT = "ascii"  # APRS uses ASCII
-    VERS = "APZ090"  # Software experimental vers 0.9.0
+    VERS = "APZ028"  # Software experimental vers 0.28.0
     SPECIAL_CALLS = ["USNAP1", "PSAT", "PCSAT", "AISAT"]
+    LOG_FILE = "ygate.log"
 
     def __init__(
             self,
@@ -365,20 +369,28 @@ class Ygate:
         :param longitude:  Longitude
         :param altitude:   Altitude in ft or m, 0. if no altitude
         """
-        self.user = f"{user}-{ssid}"
-        self.secret = f"{secret}"
-        self.pos = (latitude, longitude, altitude)
+        User = namedtuple("User", ["my_call", "ssid", "secret", "pos"])
 
+        self.user = User(  # user
+            my_call=user,
+            ssid=ssid,
+            secret=secret,
+            pos=(latitude, longitude, altitude)
+        )
+
+        self.pstat = [0, 0, 0, []]
+
+        logging.basicConfig(  # logging
+            filename=self.LOG_FILE,
+            level=logging.INFO,
+            format='%(asctime)s %(message)s'
+        )
+
+        self.start_datetime = datetime.datetime.now()
+        self.msg = ""  # Status messages
         self.ser = None
         self.sck = None
         self.sock_file = None
-
-        # Statistics
-        self.start_datetime = datetime.datetime.now()
-        self.call_signs = []  # List of unique calls heard
-        self.p_stats = [0, 0, 0]  # gated, not gtd, invalid
-
-        self.msg = ""  # Status messages
 
     def signal_handler(self, interupt_signal, frame):
         """
@@ -389,15 +401,17 @@ class Ygate:
         """
         print("\r\nCtrl+C, exiting.")
         print(
-            "{:d}".format(self.p_stats[0] + self.p_stats[1]
-                          + self.p_stats[2])
-            + f" packets received, {self.p_stats[0]} Packets gated "
-            f"{self.p_stats[1]} Packets not gated, "
-            f"{self.p_stats[2]} invalid packets."
+            "{:d}".format(self.pstat[0] + self.pstat[1]
+                          + self.pstat[2])
+            + f" packets received, {self.pstat[0]} Packets gated "
+            f"{self.pstat[1]} Packets not gated, "
+            f"{self.pstat[2]} invalid packets."
         )
         print("List of unique call sign heard:")
-        print(self.call_signs)
+        print(self.pstat[3])
         self.ser.close()
+        logging.info(self.pstat)
+        logging.info("Program exit\r\n")
         # os._exit is used to exit the program
         # immediately, because threats are running
         os._exit(0)
@@ -411,14 +425,14 @@ class Ygate:
         # check for normal calls
         val_call = re.match(r"\d?[A-Z]{1,2}\d{1,4}[A-Z]{1,4}", p_str)
         if val_call:
-            if val_call.group() not in self.call_signs:
-                self.call_signs.append(val_call.group())
+            if val_call.group() not in self.pstat[3]:
+                self.pstat[3].append(val_call.group())
             return True
         # check for possible aliases/special calls
         val_call = re.match(r"([A-Z\d]{4,7})(-\d{1,2})?", p_str)
-        if val_call and val_call.goup(1) in self.SPECIAL_CALLS:
-            if val_call.group() not in self.call_signs:
-                self.call_signs.append(val_call.group())
+        if val_call and val_call.group(1) in self.SPECIAL_CALLS:
+            if val_call.group() not in self.pstat[3]:
+                self.pstat[3].append(val_call.group())
             return True
         return False
 
@@ -447,7 +461,7 @@ class Ygate:
         time.sleep(1.0)
         # Login to APRS Server
         self.sck.sendall(
-            bytes(f"user {self.user} pass {self.secret} "
+            bytes(f"user {self.user.my_call}-{self.user.ssid} pass {self.user.secret} "
                   f"vers 9V1KG-ygate 0.9 filter m/{self.RANGE}\r\n", "utf-8")
         )
         # if second line contains "unverified", login was not successful
@@ -458,7 +472,7 @@ class Ygate:
             login = self.sock_file.readline()  # 2nd response line
         if login.find("# logresp") >= 0 and login.find(" verified") > 0:
             print(f"{l_time} {COL.green}{login.strip()}{COL.end}")
-            print(f"{l_time} {Color.GREEN}{login.strip()}{Color.END}")
+            logging.info("%s", login.strip())
             return True
         print(
             f"{l_time} {COL.red}Login not successful. "
@@ -473,26 +487,29 @@ class Ygate:
         :param aprs_string:
         :return: Boolean indicating Success or failure
         """
-        dt_id = "MSG " if re.search(r"::", aprs_string) else "POS "
-        # dt_id = aprs_string[0]
+        dt_id = APRS_DATA_TYPE[aprs_string.split(":")[1][0]]
         l_time = time.strftime("%H:%M:%S")
         if is_internet():
             try:
                 self.sck.sendall(bytes(aprs_string, self.FORMAT))
+                logging.debug("[%s] %s", dt_id, aprs_string.strip())
                 print_wrap(f"{l_time} [{dt_id}] {COL.blue}{aprs_string.strip()}{COL.end}")
                 return True
             except (TimeoutError, BrokenPipeError, OSError) as msg:
                 err = msg.strerror
         else:
             err = "No internet"
+        logging.debug(err)
         print_wrap(
             f"{l_time} {COL.yellow}{err} Trying to re-establish connection ...{COL.end}"
         )
         time.sleep(2.0)
         if self.aprs_con:
             self.sck.sendall(bytes(aprs_string, self.FORMAT))
+            logging.debug("[%s] %s", dt_id, aprs_string.strip())
             print_wrap(f"{l_time} [{dt_id}] {COL.blue}{aprs_string.strip()}{COL.end}")
             return True
+        logging.warning("[    ] Not sent: %s", aprs_string.strip())
         print_wrap(
             f"{l_time} {COL.yellow}Not sent: {COL.end}{aprs_string.strip()}"
         )
@@ -502,29 +519,31 @@ class Ygate:
         """
         thread that sends position every BEACON sec to APRS IS
         """
-        pos_c = compress_position(self.pos[0], self.pos[1], self.pos[2])
-        position_string = f"{self.user}>{self.VERS},TCPIP*:={pos_c}{self.BCNTXT}\n"
+        pos_c = compress_position(self.user.pos[0], self.user.pos[1], self.user.pos[2])
+        position_string = f"{self.user.my_call}-{self.user.ssid}" \
+                          f">{self.VERS},TCPIP*:={pos_c}{self.BCNTXT}\n"
         threading.Timer(self.BEACON, self.send_my_position).start()
         self.send_aprs(position_string)
 
-    def send_bulletin(self):
+    def send_status(self):
         """
         thread that sends a bulletin every HOURLY sec to APRS IS
         """
-        if self.p_stats[0] > 0:
+        if self.pstat[0] > 0:
             # send statistics via bulletin
             time_on = datetime.datetime.now() - self.start_datetime
-            p_tot = self.p_stats[0] + self.p_stats[1] + self.p_stats[2]
-            n_calls = len(self.call_signs)
-            bulletin_txt = f"IGate up {time_on.days} days " \
-                f" {round(time_on.seconds/3600,1)} h - " \
-                f"{p_tot} rcvd, {self.p_stats[0]} gtd, " \
+            p_tot = self.pstat[0] + self.pstat[1] + self.pstat[2]
+            n_calls = len(self.pstat[3])
+            status_txt = f"IGate up {time_on.days} days " \
+                f"{round(time_on.seconds/3600,1)} h " \
+                f"{p_tot} rcvd, {self.pstat[0]} gtd, " \
                 f"{n_calls} unique calls"
         else:
-            bulletin_txt = self.BLNTXT
-        bulletin = f"{self.user}>{self.VERS},TCPIP*::BLN1     :{self.user} {bulletin_txt}\n"
-        threading.Timer(self.HOURLY, self.send_bulletin).start()
-        self.send_aprs(bulletin)
+            status_txt = self.STATUS_TXT
+        status = f"{self.user.my_call}-{self.user.ssid}>{self.VERS}," \
+                   f"TCPIP*:>{status_txt}\r\n"
+        threading.Timer(self.HOURLY, self.send_status).start()
+        self.send_aprs(status)
 
     def aprsis_rx(self):
         """
@@ -564,7 +583,7 @@ class Ygate:
             self.msg = "NOGATE, not gated"
         else:
             return True
-        self.p_stats[1] += 1
+        self.pstat[1] += 1
         return False
 
     def do_gating(self, packet: bytes) -> bool:
@@ -575,23 +594,22 @@ class Ygate:
         """
         try:
             self.sck.sendall(packet)
-            self.p_stats[0] += 1
+            self.pstat[0] += 1
             self.msg = ""
             return True
         except (TimeoutError, BrokenPipeError, OSError):
             if self.aprs_con:
                 self.sck.sendall(packet)
-                self.p_stats[0] += 1
+                self.pstat[0] += 1
                 self.msg = ""
                 return True
             self.msg = "No network/internet, not gated"
-            self.p_stats[1] += 1
+            self.pstat[1] += 1
             return False
 
     def open_serial(self) -> bool:
         """
         Opens serial port with self.BAUD Bd
-        :param serial_dev: driver string
         :return: True when serial could be opened
         """
         try:
@@ -606,25 +624,26 @@ class Ygate:
             )
             print(" " * 9 + f"{COL.red}Check connection and driver name{COL.end}")
             print(" " * 9 + f"{COL.red}Error {str(err)}{COL.end}")
+            logging.warning("%s", str(err))
             return False
 
     def query_reply(self, call: str, p_ld: str):
         """
-        Sends reply to a query via APRS-IS
+        Sends reply to a query via APRS-IS - \r\n!
         :param call: Destination call sign
         :param p_ld: original payload
         :return:
         """
-        dest = f"{self.user}>{self.VERS},TCPIP*:"
+        dest = f"{self.user.my_call}-{self.user.ssid}>{self.VERS},TCPIP*:"
         if re.search(r":\?IGATE\?", p_ld):  # Igate
             self.send_aprs(
                 f"{dest}:{call.ljust(9)}:"
-                f"<IGATE,MSG_CNT={self.p_stats[0]} LOC_CNT={len(self.call_signs)}\r\n"
+                f"<IGATE,MSG_CNT={self.pstat[0]} LOC_CNT={len(self.pstat[3])}\r\n"
             )
         if re.search(r":\?APRSD", p_ld):  # Direct heard calls
             self.send_aprs(
-                f"{dest}:{call.ljust(9)}:\r\n"
-                f"Directs= {' '.join(self.call_signs)}\r\n"
+                f"{dest}:{call.ljust(9)}:"
+                f"Directs= {' '.join(self.pstat[3])}\r\n"
             )
         if re.search(r":\?APRSS", p_ld):  # Status
             time_on = datetime.datetime.now() - self.start_datetime
@@ -633,10 +652,9 @@ class Ygate:
                 f"{dest}:{call.ljust(9)}:{txt}\r\n"
             )
         if re.search(r":\?APRSP", p_ld):  # Position
-            pos_c = compress_position(self.pos[0], self.pos[1], self.pos[2])
+            pos_c = compress_position(self.user.pos[0], self.user.pos[1], self.user.pos[2])
             self.send_aprs(
                 f"{dest}={pos_c}{self.BCNTXT}\r\n"
-
             )
 
     def get_data_type(self, routing: str, pay_ld: str) -> str:
@@ -674,20 +692,23 @@ class Ygate:
         :return: None
         """
         print(
-            f"{COL.green}{(str(self.start_datetime).split('.'))[0]} {self.user} "
+            f"{COL.green}{(str(self.start_datetime).split('.'))[0]} "
+            f"{self.user.my_call}-{self.user.ssid} "
             f"IGgate started - Program by 9V1KG{COL.end}"
         )
-        print(" " * 9 + f"Formatted  Position:"
-                        f" {format_position(self.pos[0], self.pos[1])}")
-        print(" " * 9 + f"Compressed Position:"
-                        f" {compress_position(self.pos[0], self.pos[1], self.pos[2])}")
+        pos_c = compress_position(self.user.pos[0], self.user.pos[1], self.user.pos[2])
+        pos_f = format_position(self.user.pos[0], self.user.pos[1])
+        print(" " * 9 + f"Formatted  Position: {pos_f}")
+        print(" " * 9 + f"Compressed Position: {pos_c}")
+        logging.info("Ygate program started, version %s", self.VERS)
+
         loc_time = time.strftime("%H:%M:%S")
         if not self.open_serial():
             sys.exit(1)
         if is_internet():  # check internet connection
             print(f"{loc_time} Logging in to {self.HOST}")
             if self.aprs_con:
-                self.send_bulletin()
+                self.send_status()
                 time.sleep(5.)  # wait 5 sec before sending beacon
                 self.send_my_position()
             else:
@@ -716,50 +737,60 @@ class Ygate:
         while True:
             if "-i" in str(sys.argv):  # -i as cmd line argument
                 self.aprsis_rx()
-            b_read = self.ser.read_until()
-            res = decode_ascii(b_read)
-            if res[0] > 0:  # invalid ascii char in routing
-                localtime = time.strftime("%H:%M:%S")
+
+            a_p1 = decode_ascii(self.ser.read_until())  # 1st line routing
+            b_p2 = self.ser.read_until()  # 2nd line payload bytes
+            a_p2 = decode_ascii(b_p2)
+            routing = a_p1[1]
+            payload = a_p2[1]  # non ascii chars will be shown as\xnn
+            logging.debug("[FTM ] %s %s", a_p1[1], a_p2[1])
+            data_type = self.get_data_type(routing, payload)
+            mic_e = mic_e_decode(routing, b_p2)  # mic-e decoding
+            localtime = time.strftime("%H:%M:%S")
+
+            if a_p1[0] > 0:  # invalid ascii char in routing
                 print_wrap(
-                    f"{localtime} [INV ] {COL.yellow}Invalid routing: {COL.end} {res[1]}"
+                    f"{localtime} [INV ] {COL.yellow}Invalid routing: {COL.end} {a_p1[1]}"
                 )
-                self.p_stats[2] += 1
-            elif self.is_routing(res[1]) and re.search(r" \[.*\] <UI.*>:", res[1]):
-                # routing starts with a call sign and contains " [date time] <UI *>"
-                localtime = time.strftime("%H:%M:%S")
-                routing: str = res[1]
-                b_read = self.ser.read_until()  # next line is payload
-                res = decode_ascii(b_read)
-                payload: str = res[1]  # non ascii chars will be shown as\xnn
-                data_type = self.get_data_type(routing, payload)
+                logging.warning("[INV ] Invalid routing: %s %s", routing, payload)
+                self.pstat[2] += 1
+            elif self.is_routing(routing) and re.search(r" \[.*\] <UI.*>:", routing):
+                # routing starts with a valid call sign and contains " [date time] <UI *>"
                 if self.check_routing(routing, payload):  # can be routed
                     routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAR,{self.user}:", routing
+                        r" \[.*\] <UI.*>:", f",qAR,{self.user.my_call}-{self.user.ssid}:", routing
                     )  # replace "[...]<...>" with ",qAR,Call:"
-                    packet = bytes(routing, self.FORMAT) + b_read  # byte string
+                    packet = bytes(routing, self.FORMAT) + b_p2  # byte string
                     if self.do_gating(packet):
                         print_wrap(f"{localtime} [{data_type}] {routing}{payload}")
-                        # Print decoded MIC-E data
-                        if data_type == "MICE" and "-d" in str(sys.argv):
-                            print(16 * " " + mic_e_decode(routing, b_read))
+                        logging.info("[%s] %s %s", data_type, routing, payload)
                     else:
                         routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                        logging.warning("[%s] %s: %s %s", data_type, self.msg, routing, payload)
                         print_wrap(
-                            f"{localtime} {COL.yellow}{self.msg}{COL.end}: "
+                            f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                             f"{routing}{payload}"
                         )
                 else:  # no routing to internet
                     routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                    logging.info("[%s] %s: %s %s", data_type, self.msg, routing, payload)
                     print_wrap(
                         f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                         f"{routing}{payload}"
                     )
-            elif len(res[1]) > 0:
-                localtime = time.strftime("%H:%M:%S")
-                print_wrap(f"{localtime} {COL.yellow}Invalid routing{COL.end} {res[1]}")
-                self.p_stats[2] += 1
-            else:  # just \r\n disregard
-                pass
+                if "-d" in str(sys.argv) and len(mic_e) > 0:
+                    print(16 * " " + mic_e)
+                    logging.info("       %s", mic_e)
+            elif len(routing) > 0:  # no invalid char in routing, but not to be routed
+                routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                logging.warning("[%s] Invalid routing: %s %s", data_type, routing, payload)
+                print_wrap(
+                    f"{localtime} [{data_type}] {COL.yellow}"
+                    f"Invalid routing:{COL.end} {routing} {payload}")
+                self.pstat[2] += 1
+                if "-d" in str(sys.argv) and len(mic_e) > 0:
+                    print(16 * " " + mic_e)
+                    logging.info("       %s", mic_e)
 
 
 if __name__ == "__main__":
