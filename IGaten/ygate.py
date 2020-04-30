@@ -348,7 +348,7 @@ class Ygate:
     HOURLY = 3600.0
     BEACON = 1200.0  # beacon every 20 min
     FORMAT = "ascii"  # APRS uses ASCII
-    VERS = "APZ030"  # Software experimental vers 0.30.0
+    VERS = "APZ031"  # Software experimental vers 0.31.0
     SPECIAL_CALLS = ["USNAP1", "PSAT", "PCSAT", "AISAT"]
     LOG_FILE = "ygate.log"
 
