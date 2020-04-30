@@ -7,10 +7,9 @@
     https://klsin.bpmsg.com
     https://github.com/9V1KG/Igate-n
 
-    DU3TW (M0FGC)
-    Slight mods
+    DU3TW (M0FGC) Slight mods
 
-    Version 2020-04-28
+    Version 2020-04-30
 """
 
 import sys
@@ -348,7 +347,7 @@ class Ygate:
     HOURLY = 3600.0
     BEACON = 1200.0  # beacon every 20 min
     FORMAT = "ascii"  # APRS uses ASCII
-    VERS = "APZ028"  # Software experimental vers 0.28.0
+    VERS = "APZ030"  # Software experimental vers 0.30.0
     SPECIAL_CALLS = ["USNAP1", "PSAT", "PCSAT", "AISAT"]
     LOG_FILE = "ygate.log"
 
@@ -378,6 +377,12 @@ class Ygate:
             pos=(latitude, longitude, altitude)
         )
 
+        """
+        pstat[0] gated
+        pstat[1] not gated
+        pstat[2] invalid
+        pstat[3] list of unique calls
+        """
         self.pstat = [0, 0, 0, []]
 
         logging.basicConfig(  # logging
@@ -734,13 +739,17 @@ class Ygate:
         """
         signal.signal(signal.SIGINT, self.signal_handler)
         self.start_up()
+        is_ui = re.compile(r" \[.*\] <UI.*>:")
 
         while True:
             if "-i" in str(sys.argv):  # -i as cmd line argument
                 self.aprsis_rx()
 
             a_p1 = decode_ascii(self.ser.read_until())  # 1st line routing
-            b_p2 = self.ser.read_until()  # 2nd line payload bytes
+            if is_ui.search(a_p1[1]):
+                b_p2 = self.ser.read_until()  # 2nd line payload bytes
+            else:  # out of sync, disregard payload
+                b_p2 = b"\r\n"
             a_p2 = decode_ascii(b_p2)
             routing = a_p1[1]
             payload = a_p2[1]  # non ascii chars will be shown as\xnn
@@ -755,35 +764,34 @@ class Ygate:
                 )
                 logging.warning("[INV ] Invalid routing: %s%s", routing, payload)
                 self.pstat[2] += 1
-            elif self.is_routing(routing) and re.search(r" \[.*\] <UI.*>:", routing):
+            elif self.is_routing(routing):
                 # routing starts with a valid call sign and contains " [date time] <UI *>"
                 if self.check_routing(routing, payload):  # can be routed
-                    routing = re.sub(
-                        r" \[.*\] <UI.*>:", f",qAO,{self.user.my_call}-{self.user.ssid}:", routing
+                    routing = is_ui.sub(
+                        f",qAO,{self.user.my_call}-{self.user.ssid}:", routing
                     )  # replace "[...]<...>" with ",qAO,Call:"
                     packet = bytes(routing, self.FORMAT) + b_p2  # byte string
                     if self.do_gating(packet):
                         print_wrap(f"{localtime} [{data_type}] {routing}{payload}")
                         logging.info("[%s] %s%s", data_type, routing, payload)
                     else:
-                        routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                        routing = is_ui.sub("", routing)
                         logging.warning("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                         print_wrap(
                             f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
                             f"{routing}{payload}"
                         )
                 else:  # no routing to internet
-                    routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                    routing = is_ui.sub("", routing)
                     logging.info("[%s] %s: %s%s", data_type, self.msg, routing, payload)
                     print_wrap(
-                        f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: "
-                        f"{routing}{payload}"
+                        f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: {routing}{payload}"
                     )
                 if "-d" in str(sys.argv) and len(mic_e) > 0:
                     print(16 * " " + mic_e)
                     logging.info("       %s", mic_e)
             elif len(routing) > 0:  # no invalid char in routing, but not to be routed
-                routing = re.sub(r" \[.*\] <UI.*>", "", routing)
+                routing = is_ui.sub("", routing)
                 logging.warning("[%s] Invalid routing: %s%s", data_type, routing, payload)
                 print_wrap(
                     f"{localtime} [{data_type}] {COL.yellow}"
