@@ -273,6 +273,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     spd = (m_i[4] - 28)
     spd = (spd - 80) * 10 if spd >= 80 else spd * 10 + int((m_i[5] - 28) / 10)
     spd = spd - 800 if spd >= 800 else spd
+    spd *= 1.852  # knots to km/h
     crs = 100 * ((m_i[5] - 28) % 10) + m_i[6] - 28
     crs = crs - 400 if crs >= 400 else crs
 
@@ -299,7 +300,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
         Message:   msg
         If not equal zero:
         Ambiguity: ambiguity
-        Speed:     spd in knots
+        Speed:     spd in kmh
         Course:    crs in deg
         Altitude:  alt in m
         """
@@ -310,7 +311,7 @@ def mic_e_decode(route: str, m_i: bytes) -> str:
     if ambiguity > 0:
         decoded += f"Ambgty: {ambiguity} digits, "
     if spd > 0:
-        decoded += f"Speed: {spd} knots, "
+        decoded += f"Speed: {spd} km/h, "
     if crs > 0:
         decoded += f"Course: {crs} deg, "
     if alt > 0:
