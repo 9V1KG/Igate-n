@@ -407,6 +407,11 @@ class Ygate:
         :return:
         """
         print("\r\nCtrl+C, exiting.")
+        self.ser.close()
+        self.close_pgm()
+
+
+    def close_pgm(self):
         print(
             "{:d}".format(self.pstat[0] + self.pstat[1]
                           + self.pstat[2])
@@ -416,12 +421,11 @@ class Ygate:
         )
         print("List of unique call sign heard:")
         print(self.pstat[3])
-        self.ser.close()
         logging.info(self.pstat)
-        logging.info("Program exit\r\n")
         # os._exit is used to exit the program
         # immediately, because threats are running
         os._exit(0)
+
 
     def is_routing(self, p_str: str) -> bool:
         """
@@ -651,7 +655,7 @@ class Ygate:
         if re.search(r":\?APRSD", p_ld):  # Direct heard calls
             self.send_aprs(
                 f"{dest}:{call.ljust(9)}:"
-                f"Directs= {' '.join(self.pstat[3])}\r\n"
+                f" Directs= {' '.join(self.pstat[3])}\r\n"
             )
         if re.search(r":\?APRSS", p_ld):  # Status
             time_on = datetime.datetime.now() - self.start_datetime
@@ -684,7 +688,7 @@ class Ygate:
             my_c = full_call.search(pay_ld)
             if my_c and my_c.group(2) in self.user:
                 d_type = f"{COL.purple}{d_type}{COL.end}"
-                cs_to = full_call.match(routing).group(1)
+                cs_to = full_call.match(routing).group(1)  # error none?
                 if cs_to and re.search(r":\?", pay_ld):
                     # send reply to a query to cs_to
                     self.query_reply(cs_to, pay_ld)
@@ -701,7 +705,7 @@ class Ygate:
         print(
             f"{COL.green}{(str(self.start_datetime).split('.'))[0]} "
             f"{self.user.my_call}-{self.user.ssid} "
-            f"IGgate started - Program by 9V1KG{COL.end}"
+            f"IGgate started - Program Version {self.VERS[-3:]} by 9V1KG{COL.end}"
         )
         pos_c = compress_position(self.user.pos[0], self.user.pos[1], self.user.pos[2])
         pos_f = format_position(self.user.pos[0], self.user.pos[1])
@@ -745,28 +749,34 @@ class Ygate:
         while True:
             if "-i" in str(sys.argv):  # -i as cmd line argument
                 self.aprsis_rx()
-
-            a_p1 = decode_ascii(self.ser.read_until())  # 1st line routing
-            if is_ui.search(a_p1[1]):
-                b_p2 = self.ser.read_until()  # 2nd line payload bytes
-            else:  # out of sync, disregard payload
-                b_p2 = b"\r\n"
-            a_p2 = decode_ascii(b_p2)
+            localtime = time.strftime("%H:%M:%S")
+            try:  # in case, serial is disconnected
+                a_p1 = decode_ascii(self.ser.read_until())  # 1st line routing
+                if is_ui.search(a_p1[1]):
+                    b_p2 = self.ser.read_until()  # 2nd line payload bytes
+                else:  # out of sync, disregard payload
+                    b_p2 = b"\r\n"
+                a_p2 = decode_ascii(b_p2)
+            except serial.serialutil.SerialException:
+                print(f"{localtime} {COL.red}Serial read error{COL.end}")
+                logging.error("Serial interface connection error")
+                self.close_pgm()  #exit program
+                break
             routing = a_p1[1]
             payload = a_p2[1]  # non ascii chars will be shown as\xnn
             logging.debug("[FTM ] %s %s", a_p1[1], a_p2[1])
             data_type = self.get_data_type(routing, payload)
             mic_e = mic_e_decode(routing, b_p2)  # mic-e decoding
-            localtime = time.strftime("%H:%M:%S")
 
             if a_p1[0] > 0:  # invalid ascii char in routing
                 print_wrap(
-                    f"{localtime} [INV ] {COL.yellow}Invalid routing: {COL.end} {a_p1[1]}"
+                    f"{localtime} [INV ] "
+                    f"{COL.yellow}Invalid routing: {COL.end} {routing}{payload}"
                 )
                 logging.warning("[INV ] Invalid routing: %s%s", routing, payload)
                 self.pstat[2] += 1
             elif self.is_routing(routing):
-                # routing starts with a valid call sign and contains " [date time] <UI *>"
+                # routing starts with a valid call sign"
                 if self.check_routing(routing, payload):  # can be routed
                     routing = is_ui.sub(
                         f",qAO,{self.user.my_call}-{self.user.ssid}:", routing
@@ -788,19 +798,16 @@ class Ygate:
                     print_wrap(
                         f"{localtime} [{data_type}] {COL.yellow}{self.msg}{COL.end}: {routing}{payload}"
                     )
-                if "-d" in str(sys.argv) and len(mic_e) > 0:
-                    print(16 * " " + mic_e)
-                    logging.info("       %s", mic_e)
             elif len(routing) > 0:  # no invalid char in routing, but not to be routed
                 routing = is_ui.sub("", routing)
                 logging.warning("[%s] Invalid routing: %s%s", data_type, routing, payload)
                 print_wrap(
                     f"{localtime} [{data_type}] {COL.yellow}"
-                    f"Invalid routing:{COL.end} {routing} {payload}")
+                    f"Invalid routing:{COL.end} {routing}{payload}")
                 self.pstat[2] += 1
-                if "-d" in str(sys.argv) and len(mic_e) > 0:
-                    print(16 * " " + mic_e)
-                    logging.info("       %s", mic_e)
+            if "-d" in str(sys.argv) and len(mic_e) > 0:
+                print(16 * " " + mic_e)
+                logging.info("       %s", mic_e)
 
 
 if __name__ == "__main__":
